@@ -127,6 +127,15 @@ tnt_recv(struct tnt *t, struct tnt_recv *rcv)
 	case TNT_PROTO_TYPE_CALL:
 		rcv->op = TNT_RECV_CALL;
 		break;
+	case TNT_PROTO_TYPE_BEGIN:
+		rcv->op = TNT_RECV_BEGIN;
+		break;
+	case TNT_PROTO_TYPE_COMMIT:
+		rcv->op = TNT_RECV_COMMIT;
+		break;
+	case TNT_PROTO_TYPE_ROLLBACK:
+		rcv->op = TNT_RECV_ROLLBACK;
+		break;
 	default:
 		return TNT_EPROTO;
 	}

@@ -44,6 +44,9 @@ tuple_alloc(size_t size)
 	if (tuple == NULL)
 		tnt_raise(LoggedError, :ER_MEMORY_ISSUE, total, "slab allocator", "tuple");
 
+	tuple->tid   = 0;
+	tuple->v     = NULL;
+
 	tuple->flags = tuple->refs = 0;
 	tuple->bsize = size;
 

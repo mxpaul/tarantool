@@ -49,7 +49,10 @@ enum {
 	TNT_TK_VALUES,
 	TNT_TK_SELECT,
 	TNT_TK_CALL,
-	TNT_TK_OR
+	TNT_TK_OR,
+	TNT_TK_BEGIN,
+	TNT_TK_COMMIT,
+	TNT_TK_ROLLBACK
 };
 
 /* token object */

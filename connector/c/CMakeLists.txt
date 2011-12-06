@@ -38,6 +38,7 @@ set (tnt_sources
 	tnt_delete.c
 	tnt_select.c
 	tnt_call.c
+	tnt_txn.c
 	tnt_memcache_val.c
 	tnt_memcache.c)
 
@@ -89,6 +90,7 @@ install(FILES
 	include/tnt_update.h
 	include/tnt_delete.h
 	include/tnt_select.h
+	include/tnt_txn.h
 	include/tnt_ping.h
 	include/tnt_recv.h
 	include/tnt_memcache_val.h

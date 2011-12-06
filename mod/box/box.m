@@ -1,3 +1,4 @@
+
 /*
  * Copyright (C) 2010 Mail.RU
  * Copyright (C) 2010 Yuriy Vostrikov
@@ -100,6 +101,7 @@ lock_tuple(struct box_txn *txn, struct box_tuple *tuple)
 	tuple->flags |= WAL_WAIT;
 }
 
+/*
 static void
 unlock_tuples(struct box_txn *txn)
 {
@@ -108,13 +110,44 @@ unlock_tuples(struct box_txn *txn)
 		txn->lock_tuple = NULL;
 	}
 }
+*/
 
 void
 tuple_txn_ref(struct box_txn *txn, struct box_tuple *tuple)
 {
 	say_debug("tuple_txn_ref(%p)", tuple);
-	tbuf_append(txn->ref_tuples, &tuple, sizeof(struct box_tuple *));
+	tbuf_append(txn->ref_tuples, &tuple, sizeof(struct box_tuple*));
 	tuple_ref(tuple, +1);
+}
+
+#define TXN_COMMITED 0
+#define TXN_ABORTED  1
+
+static struct box_txn_watch *
+txn_watch_add(struct fiber *fiber, struct box_tuple *tu);
+
+static int txn_tuple_lock(struct box_tuple *tuple) {
+	tuple->flags |= TUPLE_WATCH;
+	/* 1. adding {fiber, tuple} to watch queue */
+	txn_watch_add(fiber, tuple);
+	/* 2. sleeping and waiting parallel txn reply */
+	wait_inbox(fiber);
+	/* 3. reading and returning status */
+	struct msg *reply = read_inbox();
+	return *(uint32_t*)reply->msg->data;
+}
+
+static struct box_txn_watch *txn_watch_match(struct box_tuple *tu);
+static void txn_watch_del(struct box_txn_watch *btw);
+
+static void txn_tuple_unlock(struct box_tuple *tu, uint32_t status) {
+	struct box_txn_watch *btw;
+	while ((btw = txn_watch_match(tu))) {
+		struct tbuf *reply = tbuf_alloc(fiber->gc_pool);
+		tbuf_append(reply, &status, sizeof(status));
+		write_inbox(btw->fiber, reply);
+		txn_watch_del(btw);
+	}
 }
 
 static void __attribute__((noinline))
@@ -128,15 +161,19 @@ prepare_replace(struct box_txn *txn, size_t cardinality, struct tbuf *data)
 		tnt_raise(IllegalParams, :"incorrect tuple length");
 
 	txn->tuple = tuple_alloc(data->len);
+	txn->tuple->tid = txn->tid;
+
 	tuple_txn_ref(txn, txn->tuple);
+
 	txn->tuple->cardinality = cardinality;
 	memcpy(txn->tuple->data, data->data, data->len);
 
+retry:
 	txn->old_tuple = txn->index->find_by_tuple(txn->index, txn->tuple);
 
-	if (txn->old_tuple != NULL)
-		tuple_txn_ref(txn, txn->old_tuple);
+	/* XXX validation! */
 
+	/*
 	if (txn->flags & BOX_ADD && txn->old_tuple != NULL)
 		tnt_raise(ClientError, :ER_TUPLE_FOUND);
 
@@ -144,7 +181,117 @@ prepare_replace(struct box_txn *txn, size_t cardinality, struct tbuf *data)
 		tnt_raise(ClientError, :ER_TUPLE_NOT_FOUND);
 
 	validate_indexes(txn);
+	*/
 
+	/* - - - - - - - */
+
+	/* DIRTY tuple:
+	 * 
+	 * 1. is newly created and inserted to index,
+	 *    marked as DIRTY, NEW (has no version list)
+	 *
+	 * 2. is recently updated and marked as DIRTY
+	 *    (must have version list)
+	 */
+
+	/* if no tuple exists, just inserting new tuple and
+	 * marking it as dirty */
+	if (txn->old_tuple == NULL) {
+		txn->tuple->flags |= TUPLE_DIRTY | TUPLE_NEW;
+		foreach_index(txn->n, index)
+			index->replace(index, NULL, txn->tuple);
+		tuple_ref(txn->tuple, +1);
+		goto done;
+	}
+
+	tuple_txn_ref(txn, txn->old_tuple);
+
+	/* tuple has not been modified */
+	if (!(txn->old_tuple->flags & TUPLE_DIRTY)) {
+		//assert(txn->old_tuple->v == NULL);
+		/* adding new tuple version to tuple list, and
+		 * marking tuple as dirty */
+		txn->old_tuple->v = txn->tuple;
+		txn->old_tuple->flags |= TUPLE_DIRTY;
+		tuple_ref(txn->tuple, +1);
+		goto done;
+	}
+
+	/* tuple has been modified */
+	/* tuple was recently created */
+	if (txn->old_tuple->flags & TUPLE_NEW) {
+
+		/* tuple was created by this transaction */
+		if (txn->old_tuple->tid == txn->tid) {
+
+			/* simply replacing old tuple */
+			txn->tuple->flags |= TUPLE_DIRTY | TUPLE_NEW;
+
+			/* cleaning old tuple flags (for propper commit) */
+			txn->old_tuple->flags &= ~(TUPLE_DIRTY|TUPLE_NEW);
+			//tuple_ref(txn->old_tuple, -1);
+
+			/* updating tuple pointer that might being
+			 * watched by other transactions */
+			/*
+			if (txn->old_tuple->flags & TUPLE_WATCH)
+				txn_watch_update(txn->old_tuple, txn->tuple);
+			*/
+
+			/* updating index */
+			foreach_index(txn->n, index)
+				index->replace(index, txn->old_tuple, txn->tuple);
+			tuple_ref(txn->tuple, +1);
+		} else {
+			/* tuple was created by another transaction */
+
+			/* locking */
+			int rc = txn_tuple_lock(txn->old_tuple);
+
+			/* checking other transaction status */
+			if (rc == TXN_COMMITED) {
+				/* data was commited, making transaction rollback */
+				tnt_raise(ClientError, :ER_TUPLE_IS_RO);
+			} else {
+				/* transaction was aborted, retrying */
+				goto retry;
+			}
+		}
+
+	} else {
+		/* tuple key has been modified but not created */
+		assert(txn->old_tuple->v);
+
+		/* last tuple modification was by this transaction */
+		if (txn->old_tuple->v->tid == txn->tid) {
+			/* simply replacing old tuple
+			 * (tuple should be already in ref list) */
+
+			//tuple_ref(txn->old_tuple->v, -1);
+
+			/* cleaning old tuple flags (for propper commit) */
+			//txn->old_tuple->flags &= ~(TUPLE_DIRTY|TUPLE_NEW);
+			
+			txn->old_tuple->v = txn->tuple;
+			tuple_ref(txn->tuple, +1);
+		} else {
+			/* last tuple modification was by other transaction */
+			/* locking */
+			int rc = txn_tuple_lock(txn->old_tuple);
+
+			/* checking other transaction status */
+			if (rc == TXN_COMMITED) {
+				/* data was commited, making transaction rollback */
+				tnt_raise(ClientError, :ER_TUPLE_IS_RO);
+			} else {
+				/* transaction was aborted, retrying */
+				goto retry;
+			}
+		}
+	}
+
+	/* - - - - - - - */
+#if 0
 	if (txn->old_tuple != NULL) {
 #ifndef NDEBUG
 		void *ka, *kb;
@@ -177,13 +324,16 @@ prepare_replace(struct box_txn *txn, size_t cardinality, struct tbuf *data)
 		foreach_index(txn->n, index)
 			index->replace(index, NULL, txn->tuple);
 	}
+#endif
 
+done:
 	txn->out->dup_u32(1); /* Affected tuples */
 
 	if (txn->flags & BOX_RETURN_TUPLE)
 		txn->out->add_tuple(txn->tuple);
 }
 
+/*
 static void
 commit_replace(struct box_txn *txn)
 {
@@ -199,7 +349,9 @@ commit_replace(struct box_txn *txn)
 		tuple_ref(txn->tuple, +1);
 	}
 }
+*/
 
+/*
 static void
 rollback_replace(struct box_txn *txn)
 {
@@ -210,6 +362,7 @@ rollback_replace(struct box_txn *txn)
 			index->remove(index, txn->tuple);
 	}
 }
+*/
 
 static void
 do_field_arith(u8 op, struct tbuf *field, void *arg, u32 arg_size)
@@ -444,6 +597,70 @@ process_select(struct box_txn *txn, u32 limit, u32 offset, struct tbuf *data)
 	*found = 0;
 
 	for (u32 i = 0; i < count; i++) {
+		struct index *index = txn->index;
+		/* End the loop if reached the limit. */
+		if (limit == *found)
+			return;
+
+		u32 key_cardinality = read_u32(data);
+		void *key = NULL;
+
+		if (key_cardinality != 0)
+			key = read_field(data);
+
+		/*
+		 * For TREE indexes, we allow partially specified
+		 * keys. HASH indexes are always unique and can
+		 * not have multiple parts.
+		 */
+		if (index->type == HASH && key_cardinality != 1)
+			tnt_raise(IllegalParams, :"key must be single valued");
+
+		/* advance remaining fields of a key */
+		for (int i = 1; i < key_cardinality; i++)
+			read_field(data);
+
+		index->iterator_init(index, key_cardinality, key);
+
+		while ((tuple = index->iterator.next_equal(index)) != NULL) {
+			/* if tuple been modified */
+			if (tuple->flags & TUPLE_DIRTY) {
+				/* if it was created by this transaction  */
+				if (tuple->flags & TUPLE_NEW) {
+					if (tuple->tid != txn->tid)
+						continue;
+				} else
+				if (tuple->v->tid == txn->tid)
+					tuple = tuple->v;
+			}
+
+			if (offset > 0) {
+				offset--;
+				continue;
+			}
+
+			txn->out->add_tuple(tuple);
+
+			if (limit == ++(*found))
+				break;
+		}
+	}
+	if (data->len != 0)
+		tnt_raise(IllegalParams, :"can't unpack request");
+
+
+#if 0
+	struct box_tuple *tuple;
+	uint32_t *found;
+	u32 count = read_u32(data);
+	if (count == 0)
+		tnt_raise(IllegalParams, :"tuple count must be positive");
+
+	found = palloc(fiber->gc_pool, sizeof(*found));
+	txn->out->add_u32(found);
+	*found = 0;
+
+	for (u32 i = 0; i < count; i++) {
 
 		struct index *index = txn->index;
 		/* End the loop if reached the limit. */
@@ -487,6 +704,7 @@ process_select(struct box_txn *txn, u32 limit, u32 offset, struct tbuf *data)
 	}
 	if (data->len != 0)
 		tnt_raise(IllegalParams, :"can't unpack request");
+#endif
 }
 
 static void __attribute__((noinline))
@@ -516,6 +734,7 @@ prepare_delete(struct box_txn *txn, void *key)
 		txn->out->add_tuple(txn->old_tuple);
 }
 
+/*
 static void
 commit_delete(struct box_txn *txn)
 {
@@ -526,6 +745,7 @@ commit_delete(struct box_txn *txn)
 		index->remove(index, txn->old_tuple);
 	tuple_ref(txn->old_tuple, -1);
 }
+*/
 
 static bool
 op_is_select(u32 op)
@@ -574,13 +794,75 @@ struct box_out box_out_quiet = {
 	box_quiet_add_tuple
 };
 
+TAILQ_HEAD(,box_txn) txns;
+TAILQ_HEAD(,box_txn_watch) txn_wq;
+
+static struct box_txn_watch *txn_watch_add(struct fiber *fiber, struct box_tuple *tu) {
+	struct box_txn_watch *w = salloc(sizeof(struct box_txn_watch));
+	w->fiber = fiber;
+	w->tu = tu;
+	TAILQ_INSERT_TAIL(&txn_wq, w, next);
+	return w;
+}
+
+/*
+static void txn_watch_update(struct box_tuple *old, struct box_tuple *new) {
+	new->flags |= TUPLE_WATCH;
+	struct box_txn_watch *w;
+	TAILQ_FOREACH(w, &txn_wq, next)
+		if (w->tu == old)
+			w->tu = new;
+}
+*/
+
+static struct box_txn_watch *txn_watch_match(struct box_tuple *tu) {
+	struct box_txn_watch *w;
+	TAILQ_FOREACH(w, &txn_wq, next)
+		if (w->tu == tu)
+			return w;
+	return NULL;
+}
+
+static void txn_watch_del(struct box_txn_watch *btw) {
+	TAILQ_REMOVE(&txn_wq, btw, next);
+	sfree(btw);
+}
+
+/*
+static struct box_txn *txn_match(u16 tid) {
+	struct box_txn *txn;
+	TAILQ_FOREACH(txn, &txns, next)
+		if (txn->tid == tid)
+			return txn;
+	return NULL;
+}
+*/
+
+/*
+static struct box_txn_op*
+txn_op(struct box_txn *txn, int type,
+       struct box_tuple *a, struct box_tuple *b)
+{
+	struct box_txn_op *opp = (struct box_txn_op*)(txn->ops->data + txn->ops->len);
+	struct box_txn_op op = { type, a, b };
+	tbuf_append(txn->ops, &op, sizeof(op));
+	return opp;
+}
+*/
+
 struct box_txn *
 txn_begin()
 {
 	struct box_txn *txn = p0alloc(fiber->gc_pool, sizeof(*txn));
 	txn->ref_tuples = tbuf_alloc(fiber->gc_pool);
+	txn->ops = tbuf_alloc(fiber->gc_pool);
 	assert(fiber->mod_data.txn == NULL);
 	fiber->mod_data.txn = txn;
+
+	static u16 tidcounter = 0;
+	txn->tid = tidcounter++;
+
+	TAILQ_INSERT_TAIL(&txns, txn, next);
 	return txn;
 }
 
@@ -610,8 +892,8 @@ txn_set_op(struct box_txn *txn, u16 op, struct tbuf *data)
 static void
 txn_cleanup(struct box_txn *txn)
 {
+	int i = txn->ref_tuples->len / sizeof(struct box_tuple*);
 	struct box_tuple **tuple = txn->ref_tuples->data;
-	int i = txn->ref_tuples->len / sizeof(struct box_txn *);
 
 	while (i-- > 0) {
 		say_debug("tuple_txn_unref(%p)", *tuple);
@@ -625,6 +907,42 @@ txn_cleanup(struct box_txn *txn)
 void
 txn_commit(struct box_txn *txn)
 {
+	assert(txn == in_txn());
+	int i, count = txn->ref_tuples->len / sizeof(struct box_tuple*);
+
+	struct box_tuple **tuple = txn->ref_tuples->data;
+	i = count;
+	while (i-- > 0) {
+		struct box_tuple *tu = *tuple;
+		if (tu->flags & TUPLE_DIRTY) {
+			if (tu->flags & TUPLE_NEW) {
+				/* ... */
+			} else {
+				/* setting new transaction id to tuple */
+				tu->v->tid = txn->tid;
+				/* commiting update to index */
+				foreach_index(txn->n, index)
+					index->replace(index, tu, tu->v);
+				tu->v = NULL;
+			}
+			tu->flags &= ~(TUPLE_NEW|TUPLE_DIRTY);
+			/* delete? */
+		}
+		tuple++;
+	}
+
+	tuple = txn->ref_tuples->data;
+	i = count;
+	while (i-- > 0) {
+		struct box_tuple *tu = *tuple;
+		if (tu->flags & TUPLE_WATCH) {
+			txn_tuple_unlock(tu, TXN_COMMITED);
+			tu->flags &= ~TUPLE_WATCH;
+		}
+		tuple++;
+	}
+
+#if 0
 	assert(txn == in_txn());
 	assert(txn->op);
 
@@ -654,6 +972,7 @@ txn_commit(struct box_txn *txn)
 		else
 			commit_replace(txn);
 	}
+#endif
 	/*
 	 * If anything above throws, we must be able to
 	 * roll back. Thus clear mod_data.txn only when
@@ -671,6 +990,46 @@ void
 txn_rollback(struct box_txn *txn)
 {
 	assert(txn == in_txn());
+	int i, count = txn->ref_tuples->len / sizeof(struct box_tuple*);
+
+	struct box_tuple **tuple = txn->ref_tuples->data;
+	i = count;
+	while (i-- > 0) {
+		struct box_tuple *tu = *tuple;
+		if (tu->flags & TUPLE_DIRTY) {
+			if (tu->flags & TUPLE_NEW) {
+				tu->tid = txn->tid;
+				tu->flags &= ~(TUPLE_NEW|TUPLE_DIRTY);
+				/* removing */
+				foreach_index(txn->n, index)
+					index->remove(index, tu);
+				tuple_ref(tu, -1);
+			} else {
+				tu->flags &= ~(TUPLE_DIRTY);
+				tuple_ref(tu->v, -1);
+				tu->v = NULL;
+			}
+			/* delete? */
+		}
+		tuple++;
+	}
+
+	tuple = txn->ref_tuples->data;
+	i = count;
+	while (i-- > 0) {
+		struct box_tuple *tu = *tuple;
+		if (tu->flags & TUPLE_WATCH) {
+			txn_tuple_unlock(tu, TXN_ABORTED);
+			tu->flags &= ~TUPLE_WATCH;
+		}
+		tuple++;
+	}
+
+	txn_cleanup(txn);
+	fiber->mod_data.txn = 0;
+
+#if 0
+	assert(txn == in_txn());
 	fiber->mod_data.txn = 0;
 	if (txn->op == 0)
 		return;
@@ -685,6 +1044,7 @@ txn_rollback(struct box_txn *txn)
 	}
 
 	txn_cleanup(txn);
+#endif
 }
 
 static void
@@ -695,6 +1055,8 @@ box_dispatch(struct box_txn *txn, struct tbuf *data)
 	u32 key_len;
 
 	say_debug("box_dispatch(%i)", txn->op);
+
+	printf("%d\n", txn->tid);
 
 	switch (txn->op) {
 	case REPLACE:
@@ -732,7 +1094,6 @@ box_dispatch(struct box_txn *txn, struct tbuf *data)
 
 		if (i >= BOX_INDEX_MAX ||
 		    space[txn->n].index[i].key_cardinality == 0) {
-
 			tnt_raise(LoggedError, :ER_NO_SUCH_INDEX, i, txn->n);
 		}
 		txn->index = &space[txn->n].index[i];
@@ -750,7 +1111,23 @@ box_dispatch(struct box_txn *txn, struct tbuf *data)
 		txn->flags |= read_u32(data) & BOX_ALLOWED_REQUEST_FLAGS;
 		box_lua_call(txn, data);
 		break;
-
+	case BEGIN:
+		if (!(txn->flags & BOX_SINGLE_STMT))
+			tnt_raise(IllegalParams, :"included multi-stmt transactions are not supported");
+		/* begin multi-statement txn */
+		txn->flags &= ~BOX_SINGLE_STMT;
+		txn->out->dup_u32(0);
+		break;
+	case COMMIT:
+		if (txn->flags & BOX_SINGLE_STMT)
+			tnt_raise(IllegalParams, :"commit as single-stmt transaction");
+		txn->flags |= BOX_COMMIT;
+		break;
+	case ROLLBACK:
+		if (txn->flags & BOX_SINGLE_STMT)
+			tnt_raise(IllegalParams, :"rollback as single-stmt transaction");
+		txn->flags |= BOX_ROLLBACK;
+		break;
 	default:
 		say_error("box_dispatch: unsupported command = %" PRIi32 "", txn->op);
 		tnt_raise(IllegalParams, :"unsupported command code, check the error log");
@@ -998,14 +1375,19 @@ box_process_rw(u32 op, struct tbuf *request_data)
 	struct box_txn *txn = in_txn();
 	if (txn == NULL) {
 		txn = txn_begin();
-		txn->flags |= BOX_GC_TXN;
+		txn->flags |= BOX_GC_TXN | BOX_SINGLE_STMT;
 		txn->out = &box_out_iproto;
 	}
 
 	@try {
 		txn_set_op(txn, op, request_data);
 		box_dispatch(txn, request_data);
-		txn_commit(txn);
+		if (txn->flags & BOX_SINGLE_STMT ||
+		    txn->flags & BOX_COMMIT) {
+			txn_commit(txn);
+		} else
+		if (txn->flags & BOX_ROLLBACK) 
+			txn_rollback(txn);
 	}
 	@catch (id e) {
 		txn_rollback(txn);
@@ -1360,6 +1742,8 @@ mod_free(void)
 void
 mod_init(void)
 {
+	TAILQ_INIT(&txns);
+	TAILQ_INIT(&txn_wq);
 	static iproto_callback ro_callback = box_process_ro;
 
 	title("loading");

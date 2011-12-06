@@ -1,5 +1,5 @@
-#ifndef LIBTNT_H_INCLUDED
-#define LIBTNT_H_INCLUDED
+#ifndef TNT_TXN_H_INCLUDED
+#define TNT_TXN_H_INCLUDED
 
 /*
  * Copyright (C) 2011 Mail.RU
@@ -26,30 +26,8 @@
  * SUCH DAMAGE.
  */
 
-#include <stdint.h>
-#include <stdarg.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/uio.h>
+int tnt_begin(struct tnt *t, int reqid);
+int tnt_rollback(struct tnt *t, int reqid);
+int tnt_commit(struct tnt *t, int reqid);
 
-#include <tnt_queue.h>
-#include <tnt_error.h>
-#include <tnt_mem.h>
-#include <tnt_opt.h>
-#include <tnt_buf.h>
-#include <tnt_main.h>
-#include <tnt_io.h>
-#include <tnt_proto.h>
-#include <tnt_tuple.h>
-#include <tnt_insert.h>
-#include <tnt_update.h>
-#include <tnt_delete.h>
-#include <tnt_select.h>
-#include <tnt_call.h>
-#include <tnt_txn.h>
-#include <tnt_ping.h>
-#include <tnt_recv.h>
-#include <tnt_memcache_val.h>
-#include <tnt_memcache.h>
-
-#endif /* LIBTNT_H_INCLUDED */
+#endif

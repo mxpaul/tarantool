@@ -36,8 +36,18 @@ struct tbuf;
 enum tuple_flags {
 	/** Waiting on WAL write to complete. */
 	WAL_WAIT = 0x1,
+
 	/** A new primary key is created but not yet written to WAL. */
 	GHOST = 0x2,
+
+	/** tuple is being updated during transaction */
+	TUPLE_DIRTY = 0x4,
+
+	/** tuple is being created during transaction */
+	TUPLE_NEW = 0x8,
+
+	/** tuple is being watched by some transaction */
+	TUPLE_WATCH = 0xa
 };
 
 /**
@@ -46,6 +56,11 @@ enum tuple_flags {
  */
 struct box_tuple
 {
+	/** last transaction id */
+	u16 tid;
+	/* tuple version list */
+	struct box_tuple *v;
+
 	/** reference counter */
 	u16 refs;
 	/* see enum tuple_flags */

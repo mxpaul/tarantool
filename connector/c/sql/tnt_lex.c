@@ -150,6 +150,9 @@ static struct {
 	{  "SELECT", 6, TNT_TK_SELECT },
 	{  "OR",     2, TNT_TK_OR },
 	{  "CALL",   4, TNT_TK_CALL },
+	{  "BEGIN",  5, TNT_TK_BEGIN },
+	{  "COMMIT", 6, TNT_TK_COMMIT },
+	{  "ROLLBACK", 8, TNT_TK_ROLLBACK },
 	{  NULL,     0, TNT_TK_NONE }
 };
 

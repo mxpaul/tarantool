@@ -1,5 +1,3 @@
-#ifndef LIBTNT_H_INCLUDED
-#define LIBTNT_H_INCLUDED
 
 /*
  * Copyright (C) 2011 Mail.RU
@@ -26,30 +24,69 @@
  * SUCH DAMAGE.
  */
 
+#include <stdlib.h>
 #include <stdint.h>
-#include <stdarg.h>
-#include <unistd.h>
+#include <stdio.h>
+#include <string.h>
+
 #include <sys/types.h>
 #include <sys/uio.h>
 
 #include <tnt_queue.h>
 #include <tnt_error.h>
 #include <tnt_mem.h>
-#include <tnt_opt.h>
 #include <tnt_buf.h>
+#include <tnt_opt.h>
 #include <tnt_main.h>
 #include <tnt_io.h>
-#include <tnt_proto.h>
 #include <tnt_tuple.h>
+#include <tnt_proto.h>
 #include <tnt_insert.h>
-#include <tnt_update.h>
-#include <tnt_delete.h>
-#include <tnt_select.h>
-#include <tnt_call.h>
-#include <tnt_txn.h>
-#include <tnt_ping.h>
-#include <tnt_recv.h>
-#include <tnt_memcache_val.h>
-#include <tnt_memcache.h>
 
-#endif /* LIBTNT_H_INCLUDED */
+int
+tnt_begin(struct tnt *t, int reqid)
+{
+	struct tnt_proto_header hdr;
+	hdr.type = TNT_PROTO_TYPE_BEGIN;
+	hdr.len = 0;
+	hdr.reqid = reqid;
+
+	struct iovec v[1];
+	v[0].iov_base = &hdr;
+	v[0].iov_len = sizeof(struct tnt_proto_header);
+
+	t->error = tnt_io_sendv(t, v, 1);
+	return (t->error == TNT_EOK) ? 0 : -1;
+}
+
+int
+tnt_commit(struct tnt *t, int reqid)
+{
+	struct tnt_proto_header hdr;
+	hdr.type = TNT_PROTO_TYPE_COMMIT;
+	hdr.len = 0;
+	hdr.reqid = reqid;
+
+	struct iovec v[1];
+	v[0].iov_base = &hdr;
+	v[0].iov_len = sizeof(struct tnt_proto_header);
+
+	t->error = tnt_io_sendv(t, v, 1);
+	return (t->error == TNT_EOK) ? 0 : -1;
+}
+
+int
+tnt_rollback(struct tnt *t, int reqid)
+{
+	struct tnt_proto_header hdr;
+	hdr.type = TNT_PROTO_TYPE_ROLLBACK;
+	hdr.len = 0;
+	hdr.reqid = reqid;
+
+	struct iovec v[1];
+	v[0].iov_base = &hdr;
+	v[0].iov_len = sizeof(struct tnt_proto_header);
+
+	t->error = tnt_io_sendv(t, v, 1);
+	return (t->error == TNT_EOK) ? 0 : -1;
+}

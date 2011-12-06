@@ -356,11 +356,38 @@ noargs:
 		}
 		sql->ops++;
 		break;
+	/* BEGIN */
+	case TNT_TK_BEGIN:
+		if (tnt_begin(sql->t, 0) == -1) {
+			tnt_sql_error(sql, tk, "begin failed: %s",
+				      tnt_strerror(sql->t)); 
+			goto error;
+		}
+		sql->ops++;
+		break;
+	/* COMMIT */
+	case TNT_TK_COMMIT:
+		if (tnt_commit(sql->t, 0) == -1) {
+			tnt_sql_error(sql, tk, "commit failed: %s",
+				      tnt_strerror(sql->t)); 
+			goto error;
+		}
+		sql->ops++;
+		break;
+	/* ROLLBACK */
+	case TNT_TK_ROLLBACK:
+		if (tnt_rollback(sql->t, 0) == -1) {
+			tnt_sql_error(sql, tk, "rollback failed: %s",
+				      tnt_strerror(sql->t)); 
+			goto error;
+		}
+		sql->ops++;
+		break;
 	case TNT_TK_ERROR:
 		return tnt_sql_error(sql, tk, "%s", sql->l->error);
 	default:
 		return tnt_sql_error(sql, tk,
-			"insert, update, delete, select, call, ping are expected");
+			"insert, update, delete, select, call, ping, begin, commit, rollback are expected");
 	}
 	rc = true;
 error:
@@ -432,7 +459,10 @@ tnt_query_is(char *q, size_t qsize)
 		    tk->tk == TNT_TK_UPDATE ||
 		    tk->tk == TNT_TK_SELECT ||
 		    tk->tk == TNT_TK_DELETE ||
-		    tk->tk == TNT_TK_CALL)
+		    tk->tk == TNT_TK_CALL ||
+		    tk->tk == TNT_TK_BEGIN ||
+		    tk->tk == TNT_TK_COMMIT ||
+		    tk->tk == TNT_TK_ROLLBACK)
 			rc = 1;
 		break;
 	}
