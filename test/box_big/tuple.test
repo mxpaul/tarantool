@@ -1,0 +1,46 @@
+# encoding: tarantool
+
+print "test insert long tuples"
+
+PADDING_STR = '0123456789abcdef'
+
+# values sizes: 256 KiB, 512 KiB, 1 MiB, 2 MiB, 8 MiB
+values_size_list = [ 262144, 524288, 1048576, 2097152, 8388608 ]
+#tuples_size_list = [ 2027 ]
+
+key = 0
+value = ''
+for value_size in values_size_list:
+    # fill tuple's value
+    while len(value) < value_size:
+        value += PADDING_STR
+
+    # insert tuple
+    print ""
+    print "insert long tuple"
+    print "key: %d" % key
+    print "value size: %d bytes" % len(value)
+    result = exec sql silent "insert into t0 values (%d, '%s')" % (key, value)
+    print result
+
+    # select tuple
+    print ""
+    print "select long tuple"
+    tuple = exec sql silent "select * from t0 where k0 = %d" % (key)
+    print "key: %s" % tuple[0]
+    print "value size: %d bytes" % len(tuple[1])
+
+    # verify result
+    print ""
+    print "verify long tuple"
+    if tuple[1] == value:
+        print "verify passed"
+    else:
+        print "verify failed"
+
+    # delete tuple
+    result = exec sql silent "delete from t0 where k0 = %d" % (key)
+    print result
+
+    # goto new iteration
+    key += 1

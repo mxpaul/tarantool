@@ -265,7 +265,9 @@ salloc(size_t size)
 	struct slab_item *item;
 
 	if ((class = class_for(size)) == NULL)
-		return NULL;
+		/* Requested size is too big for slab allocator.
+		   In this case malloc will be used. */
+		return malloc(size);
 
 	if ((slab = slab_of(class)) == NULL)
 		return NULL;
@@ -299,6 +301,16 @@ sfree(void *ptr)
 {
 	if (ptr == NULL)
 		return;
+
+	/* check, is it slab memory? */
+	const void *slab_arena_low_bound = arena.mmap_base;
+	const void *slab_arena_high_bound = arena.mmap_base + arena.mmap_size;
+	if (ptr < slab_arena_low_bound || ptr > slab_arena_high_bound) {
+		/* it's block was allocated by malloc, for realese free will be used  */
+		free(ptr);
+		return;
+	}
+
 	struct slab *slab = slab_header(ptr);
 	struct slab_class *class = slab->class;
 	struct slab_item *item = ptr;

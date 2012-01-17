@@ -1,0 +1,76 @@
+test insert long tuples
+
+insert long tuple
+key: 0
+value size: 262144 bytes
+Insert OK, 1 row affected
+
+
+select long tuple
+key: F
+value size: 1 bytes
+
+verify long tuple
+verify failed
+Delete OK, 1 row affected
+
+
+insert long tuple
+key: 1
+value size: 524288 bytes
+Insert OK, 1 row affected
+
+
+select long tuple
+key: F
+value size: 1 bytes
+
+verify long tuple
+verify failed
+Delete OK, 1 row affected
+
+
+insert long tuple
+key: 2
+value size: 1048576 bytes
+Insert OK, 1 row affected
+
+
+select long tuple
+key: F
+value size: 1 bytes
+
+verify long tuple
+verify failed
+Delete OK, 1 row affected
+
+
+insert long tuple
+key: 3
+value size: 2097152 bytes
+Insert OK, 1 row affected
+
+
+select long tuple
+key: F
+value size: 1 bytes
+
+verify long tuple
+verify failed
+Delete OK, 1 row affected
+
+
+insert long tuple
+key: 4
+value size: 8388608 bytes
+Insert OK, 1 row affected
+
+
+select long tuple
+key: F
+value size: 1 bytes
+
+verify long tuple
+verify failed
+Delete OK, 1 row affected
+
