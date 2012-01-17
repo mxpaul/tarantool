@@ -101,9 +101,12 @@ def read_varint32(varint, offset):
     return res, offset + 1
 
 
-def opt_resize_buf(buf, newsize):
-    if len(buf) < newsize:
-        return ctypes.create_string_buffer(buf.value, max(2*len, newsize))
+def opt_resize_buf(buf, request):
+    if len(buf) < request:
+        new_size = len(buf)
+        while new_size < request:
+            new_size *= 2
+        return ctypes.create_string_buffer(buf.raw, new_size)
     return buf
 
 
@@ -115,7 +118,7 @@ def pack_field(value, buf, offset):
         struct.pack_into("<cL", buf, offset, chr(INT_FIELD_LEN), value)
         offset += INT_FIELD_LEN + 1
     elif type(value) is str:
-        opt_resize_buf(buf, offset + INT_BER_MAX_LEN + len(value))
+        buf = opt_resize_buf(buf, offset + INT_BER_MAX_LEN + len(value))
         value_len_ber = save_varint32(len(value))
         struct.pack_into("{0}s{1}s".format(len(value_len_ber), len(value)),
                          buf, offset, value_len_ber, value)
