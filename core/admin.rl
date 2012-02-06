@@ -106,7 +106,7 @@ tarantool_info(struct tbuf *out)
 	tbuf_printf(out, "  config: \"%s\"" CRLF, path);
 }
 
-static int
+static void
 admin_dispatch(lua_State *L)
 {
 	struct tbuf *out = tbuf_alloc(fiber->gc_pool);
@@ -116,8 +116,7 @@ admin_dispatch(lua_State *L)
 	char *strstart, *strend;
 
 	while ((pe = memchr(fiber->rbuf->data, '\n', fiber->rbuf->size)) == NULL) {
-		if (fiber_bread(fiber->rbuf, 1) <= 0)
-			return 0;
+		fiber_bread(fiber->rbuf, 1);
 	}
 
 	pe++;
@@ -195,7 +194,7 @@ admin_dispatch(lua_State *L)
 		lua = "lu"("a")?;
 
 		commands = (help			%help						|
-			    exit			%{return 0;}					|
+			    exit			%{return;}					|
 			    lua  " "+ string		%lua						|
 			    show " "+ info		%{start(out); tarantool_info(out); end(out);}		|
 			    show " "+ fiber		%{start(out); fiber_info(out); end(out);}	|
@@ -221,7 +220,7 @@ admin_dispatch(lua_State *L)
 		end(out);
 	}
 
-	return fiber_write(out->data, out->size);
+	fiber_write(out->data, out->size);
 }
 
 static void
@@ -233,8 +232,7 @@ admin_handler(void *data __attribute__((unused)))
 	fiber_setcancelstate(true);
 	@try {
 		for (;;) {
-			if (admin_dispatch(L) <= 0)
-				return;
+			admin_dispatch(L);
 			fiber_gc();
 		}
 	} @finally {

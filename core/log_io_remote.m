@@ -47,73 +47,67 @@ remote_row_reader_v11()
 {
 	ssize_t to_read = sizeof(struct row_v11) - fiber->rbuf->size;
 
-	if (to_read > 0 && fiber_bread(fiber->rbuf, to_read) <= 0)
-		goto error;
+	if (to_read > 0)
+		fiber_bread(fiber->rbuf, to_read);
 
 	ssize_t request_len = row_v11(fiber->rbuf)->len + sizeof(struct row_v11);
 	to_read = request_len - fiber->rbuf->size;
 
-	if (to_read > 0 && fiber_bread(fiber->rbuf, to_read) <= 0)
-		goto error;
+	if (to_read > 0)
+		fiber_bread(fiber->rbuf, to_read);
 
 	say_debug("read row bytes:%" PRI_SSZ, request_len);
 	return tbuf_split(fiber->rbuf, request_len);
-error:
-	say_error("unexpected eof reading row header");
-	return NULL;
+}
+
+static void
+remote_establish_connection(struct sockaddr_in *remote_addr, i64 initial_lsn)
+{
+	/* establish connection with master */
+	fiber_connect(remote_addr);
+
+	/*
+	  replication handshake:
+	  request:  slave  ----[ LSN ]----> master
+	  responce: master --[ version ]--> slave
+	*/
+
+	/* send LSN */
+	fiber_write(&initial_lsn, sizeof(initial_lsn));
+
+	/* receive version */
+	u32 version;
+	fiber_read(&version, sizeof(version));
+
+	if (version != default_version)
+		tnt_raise(FiberIOError, :"remote version mismatch");
+
+	/* handshake was done */
+	say_crit("successfully connected to master");
+	say_crit("starting replication from lsn:%"PRIi64, initial_lsn);
 }
 
 static struct tbuf *
 remote_read_row(struct sockaddr_in *remote_addr, i64 initial_lsn)
 {
-	struct tbuf *row;
 	bool warning_said = false;
-	const int reconnect_delay = 1;
-	const char *err = NULL;
-	u32 version;
-
 	for (;;) {
-		if (fiber->fd < 0) {
-			if (fiber_connect(remote_addr) < 0) {
-				err = "can't connect to master";
-				goto err;
+		const int reconnect_delay = 1;
+		@try {
+			if (fiber->fd < 0) {
+				remote_establish_connection(remote_addr,
+							    initial_lsn);
+				warning_said = false;
 			}
 
-			if (fiber_write(&initial_lsn, sizeof(initial_lsn)) != sizeof(initial_lsn)) {
-				err = "can't write version";
-				goto err;
+			return remote_row_reader_v11();
+		} @catch (FiberIOError *e) {
+			if (!warning_said) {
+				say_info("%s", e->msg);
+				say_info("will retry every %i second",
+					 reconnect_delay);
+				warning_said = true;
 			}
-
-			if (fiber_read(&version, sizeof(version)) != sizeof(version)) {
-				err = "can't read version";
-				goto err;
-			}
-
-			if (version != default_version) {
-				err = "remote version mismatch";
-				goto err;
-			}
-
-			say_crit("successfully connected to master");
-			say_crit("starting replication from lsn:%" PRIi64, initial_lsn);
-
-			warning_said = false;
-			err = NULL;
-		}
-
-		row = remote_row_reader_v11();
-		if (row == NULL) {
-			err = "can't read row";
-			goto err;
-		}
-
-		return row;
-
-	      err:
-		if (err != NULL && !warning_said) {
-			say_info("%s", err);
-			say_info("will retry every %i second", reconnect_delay);
-			warning_said = true;
 		}
 		fiber_close();
 		fiber_sleep(reconnect_delay);

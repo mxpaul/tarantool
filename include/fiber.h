@@ -51,12 +51,33 @@
 /** Indicates that a fiber has been cancelled. */
 #define FIBER_CANCEL        0x4
 
-/** This is thrown by fiber_* API calls when the fiber is
+
+/*==========================================================================
+ * Fiber exceptions interface
+ *==========================================================================*/
+
+@interface FiberException: tnt_Exception {
+@public
+	char msg[TNT_ERRMSG_MAX];
+}
+
+- (id) init: (char *)fmt_arg, ...;
+
+- (id) init: (int)errnum_arg :(char *)fmt_arg, ...;
+
+@end
+
+/**
+ * This is thrown by fiber_* API calls when the fiber is
  * cancelled.
  */
-
-@interface FiberCancelException: tnt_Exception
+@interface FiberCancelException: FiberException
 @end
+
+
+@interface FiberIOError: FiberException
+@end
+
 
 struct msg {
 	uint32_t sender_fid;
@@ -149,7 +170,14 @@ fiber_yield(void);
 void fiber_destroy_all();
 
 struct msg *read_inbox(void);
-ssize_t fiber_bread(struct tbuf *, size_t v);
+
+/**
+ * Read at least at_least bytes from a socket.
+ *
+ * @note: this is a cancellation point.
+ */
+void
+fiber_bread(struct tbuf *, size_t v);
 
 inline static void iov_add_unsafe(const void *buf, size_t len)
 {
@@ -182,7 +210,7 @@ inline static void iov_dup(const void *buf, size_t len)
 }
 
 /* Reset the fiber's iov vector. */
-ssize_t iov_flush(void);
+size_t iov_flush(void);
 /* Write everything in the fiber's iov vector to fiber socket. */
 void iov_reset();
 
@@ -191,8 +219,13 @@ int inbox_size(struct fiber *recipient);
 void wait_inbox(struct fiber *recipient);
 
 const char *fiber_peer_name(struct fiber *fiber);
-ssize_t fiber_read(void *buf, size_t count);
-ssize_t fiber_write(const void *buf, size_t count);
+
+void
+fiber_read(void *buf, size_t count);
+
+void
+fiber_write(const void *buf, size_t count);
+
 int fiber_close(void);
 void fiber_cleanup(void);
 void fiber_gc(void);

@@ -314,58 +314,59 @@ do {										\
 #include "memcached-grammar.m"
 
 void
-memcached_handler(void *_data __attribute__((unused)))
+memcached_process_requests()
 {
-	stats.total_connections++;
-	stats.curr_connections++;
-	int r, p;
-	int batch_count;
+	fiber_bread(fiber->rbuf, 1);
+	while (true) {
+		int batch_count = 0;
 
-	for (;;) {
-		batch_count = 0;
-		if ((r = fiber_bread(fiber->rbuf, 1)) <= 0) {
-			say_debug("read returned %i, closing connection", r);
-			goto exit;
-		}
-
-	dispatch:
-		p = memcached_dispatch();
+		int p = memcached_dispatch();
 		if (p < 0) {
 			say_debug("negative dispatch, closing connection");
-			goto exit;
+			tnt_raise(FiberCancelException);
 		}
 
-		if (p == 0 && batch_count == 0) /* we havn't successfully parsed any requests */
-			continue;
+		if (p == 0 && batch_count == 0)
+			/* we havn't successfully parsed any requests */
+			break;
 
 		if (p == 1) {
 			batch_count++;
-			/* some unparsed commands remain and batch count less than 20 */
+			/* some unparsed commands remain and batch count less
+			   than 20 */
 			if (fiber->rbuf->size > 0 && batch_count < 20)
-				goto dispatch;
+				continue;
 		}
 
-		r = iov_flush();
-		if (r < 0) {
-			say_debug("flush_output failed, closing connection");
-			goto exit;
-		}
+		/* flush responce to client */
+		stats.bytes_written += iov_flush();
 
-		stats.bytes_written += r;
+		/* clean fiber's pool */
 		fiber_gc();
 
 		if (p == 1 && fiber->rbuf->size > 0) {
 			batch_count = 0;
-			goto dispatch;
+			continue;
 		}
+
+		break;
 	}
-exit:
-        iov_flush();
-	fiber_sleep(0.01);
-	say_debug("exit");
-	stats.curr_connections--; /* FIXME: nonlocal exit via exception will leak this counter */
 }
 
+void
+memcached_handler(void *_data __attribute__((unused)))
+{
+	stats.total_connections++;
+	stats.curr_connections++;
+	@try {
+		while (true)
+			memcached_process_requests();
+	} @finally {
+		fiber_sleep(0.01);
+		say_debug("exit");
+		stats.curr_connections--;
+	}
+}
 
 int
 memcached_check_config(struct tarantool_cfg *conf)

@@ -55,7 +55,71 @@
 #include <stat.h>
 #include <pickle.h>
 
+/*==========================================================================
+ * Fiber exceptions implementarion
+ *==========================================================================*/
+
+
+@implementation FiberException
+
+- (id) init: (char *)fmt_arg, ...
+{
+	[super init];
+
+	va_list ap;
+	va_start(ap, fmt_arg);
+	int result = vsnprintf(msg, TNT_ERRMSG_MAX, fmt_arg, ap);
+	va_end(ap);
+
+	if (result < 0)
+		say_syserror("can't format exception message");
+
+	return self;
+}
+
+- (id) init: (int)errnum_arg :(char *)fmt_arg, ...
+{
+	[super init];
+
+	char *msg_ptr = msg;
+	size_t msg_len = TNT_ERRMSG_MAX;
+
+	va_list ap;
+	va_start(ap, fmt_arg);
+	int result = vsnprintf(msg_ptr, msg_len, fmt_arg, ap);
+	va_end(ap);
+
+	if (result < 0) {
+		say_syserror("can't format exception message");
+		result = 0;
+	} else if (result > msg_len) {
+		result = msg_len;
+	}
+	msg_ptr += result;
+	msg_len -= result;
+
+	char error_msg_buf[64];
+	char *error_msg = strerror_r(errnum_arg, error_msg_buf,
+				     sizeof(error_msg_buf));
+	result = snprintf(msg_ptr, msg_len, ": %s", error_msg);
+	if (result < 0)
+		say_syserror("can't format exception message");
+
+	return self;
+}
+
+@end
+
 @implementation FiberCancelException
+
+- (id) init
+{
+	return [super init :"fiber is cancelled"];
+}
+
+@end
+
+@implementation FiberIOError
 @end
 
 #define FIBER_CALL_STACK 16
@@ -301,10 +365,8 @@ fiber_io_yield()
 
 	fiber_yield();
 
-	if (fiber_is_cancelled()) {
-		ev_io_stop(&fiber->io);
+	if (fiber_is_cancelled())
 		fiber_testcancel();
-	}
 }
 
 void
@@ -459,15 +521,13 @@ fiber_loop(void *data __attribute__((unused)))
 		assert(fiber != NULL && fiber->f != NULL && fiber->fid != 0);
 		@try {
 			fiber->f(fiber->f_data);
+		} @catch (FiberException *e) {
+			say_info("fiber exception: %s: `%s'", [e name], e->msg);
+		} @catch (id e) {
+			panic("exception `%s', exiting", [e name]);
 		}
-		@catch (FiberCancelException *e) {
-			say_info("fiber `%s' has been cancelled", fiber->name);
-			say_info("fiber `%s': exiting", fiber->name);
-		}
-		@catch (id e) {
-			say_error("fiber `%s': exception `%s'", fiber->name, [e name]);
-			panic("fiber `%s': exiting", fiber->name);
-		}
+
+		say_info("fiber is shutdowning now");
 		fiber_close();
 		fiber_zombificate();
 		fiber_yield();	/* give control back to scheduler */
@@ -676,39 +736,37 @@ read_inbox(void)
 	return msg;
 }
 
-/**
- * Read at least at_least bytes from a socket.
- *
- * @retval 0   socket is closed by the sender
- * @reval -1   a system error
- * @retval >0  success, size of the last read chunk is returned
- *
- * @note: this is a cancellation point.
- */
-
-ssize_t
+void
 fiber_bread(struct tbuf *buf, size_t at_least)
 {
-	ssize_t r = 0;
-	tbuf_ensure(buf, MAX(cfg.readahead, at_least));
-	size_t stop_at = buf->size + at_least;
-
 	fiber_io_start(fiber->fd, EV_READ);
+	@try {
+		tbuf_ensure(buf, MAX(cfg.readahead, at_least));
 
-	while (buf->size < stop_at) {
-		fiber_io_yield();
+		size_t stop_at = buf->size + at_least;
+		while (buf->size < stop_at) {
+			fiber_io_yield();
 
-		r = read(fiber->fd, buf->data + buf->size, buf->capacity - buf->size);
-		if (r < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
-			continue;
-		else if (r <= 0)
-			break;
+			ssize_t result = read(fiber->fd, buf->data + buf->size,
+					      buf->capacity - buf->size);
+			if (result < 0) {
+				if (errno == EINTR)
+					continue;
+				if (errno == EAGAIN || errno == EWOULDBLOCK)
+					continue;
+				tnt_raise(FiberIOError, :errno
+					  :"read form socket fail");
+			} else if (result == 0) {
+				tnt_raise(FiberIOError,
+					  :"connection was closed unexpectedly");
+			}
 
-		buf->size += r;
+			buf->size += result;
+		}
+	} @finally {
+		/* release read event for fiber's fd */
+		fiber_io_stop(fiber->fd, EV_READ);
 	}
-	fiber_io_stop(fiber->fd, EV_READ);
-
-	return r;
 }
 
 void
@@ -722,104 +780,117 @@ iov_reset()
  * @note: this is a cancellation point.
  */
 
-ssize_t
+size_t
 iov_flush(void)
 {
-	ssize_t result, r = 0, bytes = 0;
-	struct iovec *iov = iovec(fiber->iov);
-	size_t iov_cnt = fiber->iov_cnt;
+	size_t bytes = 0;
 
 	fiber_io_start(fiber->fd, EV_WRITE);
-	while (iov_cnt > 0) {
-		fiber_io_yield();
-		bytes += r = writev(fiber->fd, iov, MIN(iov_cnt, IOV_MAX));
-		if (r <= 0) {
-			if (errno == EAGAIN || errno == EWOULDBLOCK)
-				continue;
-			else
-				break;
-		}
+	@try {
+		struct iovec *iov = iovec(fiber->iov);
+		size_t iov_cnt = fiber->iov_cnt;
 
 		while (iov_cnt > 0) {
-			if (iov->iov_len > r) {
-				iov->iov_base += r;
-				iov->iov_len -= r;
-				break;
-			} else {
-				r -= iov->iov_len;
-				iov++;
-				iov_cnt--;
+			fiber_io_yield();
+
+			ssize_t result = writev(fiber->fd,
+						iov,
+						MIN(iov_cnt, IOV_MAX));
+			if (result < 0) {
+				if (errno == EINTR)
+					continue;
+				if (errno == EAGAIN || errno == EWOULDBLOCK)
+					continue;
+				tnt_raise(FiberIOError, :errno
+					  :"writev to socket fail");
+			}
+
+			bytes += result;
+			while (iov_cnt > 0) {
+				if (iov->iov_len > result) {
+					iov->iov_base += result;
+					iov->iov_len -= result;
+					break;
+				} else {
+					result -= iov->iov_len;
+					iov++;
+					iov_cnt--;
+				}
 			}
 		}
+	} @finally {
+		iov_reset();
+		fiber_io_stop(fiber->fd, EV_WRITE);
 	}
-	fiber_io_stop(fiber->fd, EV_WRITE);
 
-	if (r < 0) {
-		size_t rem = 0;
-		for (int i = 0; i < iov_cnt; i++)
-			rem += iov[i].iov_len;
-
-		say_syserror("client unexpectedly gone, %" PRI_SZ " bytes unwritten", rem);
-		result = r;
-	} else
-		result = bytes;
-
-	iov_reset();
-	return result;
+	return bytes;
 }
 
 /**
  * @note: this is a cancellation point.
  */
 
-ssize_t
+void
 fiber_read(void *buf, size_t count)
 {
-	ssize_t r, done = 0;
-
 	fiber_io_start(fiber->fd, EV_READ);
-	while (count != done) {
+	@try {
+		ssize_t done = 0;
 
-		fiber_io_yield();
+		while (done < count) {
+			fiber_io_yield();
 
-		if ((r = read(fiber->fd, buf + done, count - done)) <= 0) {
-			if (errno == EAGAIN || errno == EWOULDBLOCK)
-				continue;
-			else
-				break;
+			ssize_t result = read(fiber->fd, buf + done,
+					      count - done);
+			if (result < 0) {
+				if (errno == EINTR)
+					continue;
+				if (errno == EAGAIN || errno == EWOULDBLOCK)
+					continue;
+				tnt_raise(FiberIOError, :errno
+					  :"read form socket fail");
+			} else if (result == 0) {
+				tnt_raise(FiberIOError,
+					  :"connection was closed"
+					  " unexpectedly");
+			}
+
+			done += result;
 		}
-		done += r;
+	} @finally {
+		fiber_io_stop(fiber->fd, EV_READ);
 	}
-	fiber_io_stop(fiber->fd, EV_READ);
-
-	return done;
 }
 
 /**
  * @note: this is a cancellation point.
  */
 
-ssize_t
+void
 fiber_write(const void *buf, size_t count)
 {
-	int r;
-	unsigned int done = 0;
-
 	fiber_io_start(fiber->fd, EV_WRITE);
+	@try {
+		unsigned int done = 0;
 
-	while (count != done) {
-		fiber_io_yield();
-		if ((r = write(fiber->fd, buf + done, count - done)) == -1) {
-			if (errno == EAGAIN || errno == EWOULDBLOCK)
-				continue;
-			else
-				break;
+		while (count != done) {
+			fiber_io_yield();
+
+			int result = write(fiber->fd, buf + done, count - done);
+			if (result < 0) {
+				if (errno == EINTR)
+					continue;
+				if (errno == EAGAIN || errno == EWOULDBLOCK)
+					continue;
+				tnt_raise(FiberIOError, :errno
+					  :"write to socket fail");
+			}
+
+			done += result;
 		}
-		done += r;
+	} @finally {
+		fiber_io_stop(fiber->fd, EV_WRITE);
 	}
-	fiber_io_stop(fiber->fd, EV_WRITE);
-
-	return done;
 }
 
 /**
@@ -829,49 +900,59 @@ fiber_write(const void *buf, size_t count)
 int
 fiber_connect(struct sockaddr_in *addr)
 {
-	fiber->fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (fiber->fd < 0)
-		goto error;
+	@try {
+		fiber->fd = socket(AF_INET, SOCK_STREAM, 0);
+		if (fiber->fd < 0)
+			tnt_raise(FiberIOError, :errno
+				  :"can't create socket");
 
-	if (set_nonblock(fiber->fd) < 0)
-		goto error;
+		int result = set_nonblock(fiber->fd);
+		if (result < 0)
+			tnt_raise(FiberIOError, :errno
+				  :"can't do nonblocking socket");
 
-	if (connect(fiber->fd, (struct sockaddr *)addr, sizeof(*addr)) < 0) {
+		result = connect(fiber->fd, (struct sockaddr *)addr,
+				 sizeof(*addr));
+		if (result < 0) {
+			if (errno != EINPROGRESS)
+				tnt_raise(FiberIOError, :errno
+					  :"can't connect to remote host");
 
-		if (errno != EINPROGRESS)
-			goto error;
+			fiber_io_start(fiber->fd, EV_WRITE);
+			@try {
+				fiber_io_yield();
+			} @finally {
+				fiber_io_stop(fiber->fd, EV_WRITE);
+			}
 
-		fiber_io_start(fiber->fd, EV_WRITE);
-		fiber_io_yield();
-		fiber_io_stop(fiber->fd, EV_WRITE);
+			int error_code;
+			socklen_t error_code_size = sizeof(int);
+			result = getsockopt(fiber->fd, SOL_SOCKET, SO_ERROR,
+					    &error_code, &error_code_size);
+			if (result < 0)
+				tnt_raise(FiberIOError, :errno
+					  :"getsockopt fail");
+			assert(error_code_size == sizeof(int));
 
-		int error;
-		socklen_t error_size = sizeof(error);
-
-		if (getsockopt(fiber->fd, SOL_SOCKET, SO_ERROR,
-			       &error, &error_size) < 0)
-			goto error;
-
-		assert(error_size == sizeof(error));
-
-		if (error != 0) {
-			errno = error;
-			goto error;
+			if (error_code != 0)
+				tnt_raise(FiberIOError, :error_code
+					  :"can't connect to remote host");
 		}
+	} @catch (id e) {
+		fiber_close();
+		@throw e;
 	}
 
-	return fiber->fd;
-
-      error:
-	fiber_close();
 	return fiber->fd;
 }
 
 int
 set_nonblock(int sock)
 {
-	int flags;
-	if ((flags = fcntl(sock, F_GETFL, 0)) < 0 || fcntl(sock, F_SETFL, flags | O_NONBLOCK) < 0)
+	int flags = fcntl(sock, F_GETFL, 0);
+	if (flags < 0)
+		return -1;
+	if (fcntl(sock, F_SETFL, flags | O_NONBLOCK) < 0)
 		return -1;
 	return sock;
 }
@@ -999,8 +1080,7 @@ inbox2sock(void *_data __attribute__((unused)))
 			tbuf_append(out, msg->data, msg->size);
 		} while (ring_size(fiber->inbox) > 0);
 
-		if (fiber_write(out->data, out->size) != out->size)
-			panic("child is dead");
+		fiber_write(out->data, out->size);
 		fiber_gc();
 	}
 }
@@ -1014,16 +1094,14 @@ sock2inbox(void *_data __attribute__((unused)))
 
 	for (;;) {
 		if (fiber->rbuf->size < sizeof(len)) {
-			if (fiber_bread(fiber->rbuf, sizeof(len)) <= 0)
-				panic("child is dead");
+			fiber_bread(fiber->rbuf, sizeof(len));
 		}
 
 		len = read_u32(fiber->rbuf);
 
 		len = ntohl(len);
 		if (fiber->rbuf->size < len) {
-			if (fiber_bread(fiber->rbuf, len) <= 0)
-				panic("child is dead");
+			fiber_bread(fiber->rbuf, len);
 		}
 
 		msg = tbuf_split(fiber->rbuf, len);
@@ -1114,38 +1192,47 @@ tcp_server_handler(void *data)
 	}
 
 	fiber_io_start(fiber->fd, EV_READ);
-	for (;;) {
-		fiber_io_yield();
+	@try {
+		for (;;) {
+			fiber_io_yield();
 
-		while ((fd = accept(fiber->fd, NULL, NULL)) > 0) {
-			if (set_nonblock(fd) == -1) {
-				say_error("can't set nonblock");
-				close(fd);
+			while ((fd = accept(fiber->fd, NULL, NULL)) > 0) {
+				if (set_nonblock(fd) == -1) {
+					say_error("can't set nonblock");
+					close(fd);
+					continue;
+				}
+
+				if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY,
+					       &one, sizeof(one)) == -1) {
+					say_syserror("setsockopt failed");
+					/* Do nothing, not a fatal error.  */
+				}
+
+				snprintf(name, sizeof(name), "%i/handler",
+					 server->port);
+
+				h = fiber_create(name, fd, -1, server->handler,
+						 server->data);
+				if (h == NULL) {
+					say_error("can't create handler fiber, "
+						  "dropping client connection");
+					close(fd);
+					continue;
+				}
+
+				h->has_peer = true;
+				fiber_call(h);
+			}
+
+			if (fd < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+				say_syserror("accept");
 				continue;
 			}
-			if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY,
-				       &one, sizeof(one)) == -1) {
-				say_syserror("setsockopt failed");
-				/* Do nothing, not a fatal error.  */
-			}
-
-			snprintf(name, sizeof(name), "%i/handler", server->port);
-			h = fiber_create(name, fd, -1, server->handler, server->data);
-			if (h == NULL) {
-				say_error("can't create handler fiber, dropping client connection");
-				close(fd);
-				continue;
-			}
-
-			h->has_peer = true;
-			fiber_call(h);
 		}
-		if (fd < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-			say_syserror("accept");
-			continue;
-		}
+	} @finally {
+		fiber_io_stop(fiber->fd, EV_READ);
 	}
-	fiber_io_stop(fiber->fd, EV_READ);
 }
 
 struct fiber *

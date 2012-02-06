@@ -46,14 +46,14 @@ iproto_interact(iproto_callback *callback)
 	ssize_t to_read = sizeof(struct iproto_header);
 
 	for (;;) {
-		if (to_read > 0 && fiber_bread(in, to_read) <= 0)
-			break;
+		if (to_read > 0)
+			fiber_bread(in, to_read);
 
 		ssize_t request_len = sizeof(struct iproto_header) + iproto(in)->len;
 		to_read = request_len - in->size;
 
-		if (to_read > 0 && fiber_bread(in, to_read) <= 0)
-			break;
+		if (to_read > 0)
+			fiber_bread(in, to_read);
 
 		struct tbuf *request = tbuf_split(in, request_len);
 		iproto_reply(*callback, request);
@@ -65,10 +65,7 @@ iproto_interact(iproto_callback *callback)
 		 * next header.
 		 */
 		if (to_read > 0) {
-			if (iov_flush() < 0) {
-				say_warn("io_error: %s", strerror(errno));
-				break;
-			}
+			iov_flush();
 			fiber_gc();
 			/* Must be reset after fiber_gc() */
 			in = fiber->rbuf;

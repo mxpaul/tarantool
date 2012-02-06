@@ -115,7 +115,7 @@ tarantool_info(struct tbuf *out)
 	tbuf_printf(out, "  config: \"%s\"" CRLF, path);
 }
 
-static int
+static void
 admin_dispatch(lua_State *L)
 {
 	struct tbuf *out = tbuf_alloc(fiber->gc_pool);
@@ -125,20 +125,19 @@ admin_dispatch(lua_State *L)
 	char *strstart, *strend;
 
 	while ((pe = memchr(fiber->rbuf->data, '\n', fiber->rbuf->size)) == NULL) {
-		if (fiber_bread(fiber->rbuf, 1) <= 0)
-			return 0;
+		fiber_bread(fiber->rbuf, 1);
 	}
 
 	pe++;
 	p = fiber->rbuf->data;
 
 	
-#line 137 "core/admin.m"
+#line 136 "core/admin.m"
 	{
 	cs = admin_start;
 	}
 
-#line 142 "core/admin.m"
+#line 141 "core/admin.m"
 	{
 	if ( p == pe )
 		goto _test_eof;
@@ -201,15 +200,15 @@ case 6:
 	}
 	goto st0;
 tr13:
-#line 208 "core/admin.rl"
+#line 207 "core/admin.rl"
 	{slab_validate(); ok(out);}
 	goto st108;
 tr20:
-#line 198 "core/admin.rl"
-	{return 0;}
+#line 197 "core/admin.rl"
+	{return;}
 	goto st108;
 tr25:
-#line 145 "core/admin.rl"
+#line 144 "core/admin.rl"
 	{
 			start(out);
 			tbuf_append(out, help, strlen(help));
@@ -217,9 +216,9 @@ tr25:
 		}
 	goto st108;
 tr36:
-#line 193 "core/admin.rl"
+#line 192 "core/admin.rl"
 	{strend = p;}
-#line 151 "core/admin.rl"
+#line 150 "core/admin.rl"
 	{
 			strstart[strend-strstart]='\0';
 			start(out);
@@ -228,7 +227,7 @@ tr36:
 		}
 	goto st108;
 tr43:
-#line 158 "core/admin.rl"
+#line 157 "core/admin.rl"
 	{
 			if (reload_cfg(err))
 				fail(out, err);
@@ -237,11 +236,11 @@ tr43:
 		}
 	goto st108;
 tr66:
-#line 206 "core/admin.rl"
+#line 205 "core/admin.rl"
 	{coredump(60); ok(out);}
 	goto st108;
 tr75:
-#line 165 "core/admin.rl"
+#line 164 "core/admin.rl"
 	{
 			int ret = snapshot(NULL, 0);
 
@@ -256,7 +255,7 @@ tr75:
 		}
 	goto st108;
 tr92:
-#line 127 "core/admin.rl"
+#line 126 "core/admin.rl"
 	{
 			tarantool_cfg_iterator_t *i;
 			char *key, *value;
@@ -276,41 +275,41 @@ tr92:
 		}
 	goto st108;
 tr106:
-#line 201 "core/admin.rl"
+#line 200 "core/admin.rl"
 	{start(out); fiber_info(out); end(out);}
 	goto st108;
 tr112:
-#line 200 "core/admin.rl"
+#line 199 "core/admin.rl"
 	{start(out); tarantool_info(out); end(out);}
 	goto st108;
 tr117:
-#line 204 "core/admin.rl"
+#line 203 "core/admin.rl"
 	{start(out); palloc_stat(out); end(out);}
 	goto st108;
 tr125:
-#line 203 "core/admin.rl"
+#line 202 "core/admin.rl"
 	{start(out); slab_stat(out); end(out);}
 	goto st108;
 tr129:
-#line 205 "core/admin.rl"
+#line 204 "core/admin.rl"
 	{start(out); stat_print(out);end(out);}
 	goto st108;
 st108:
 	if ( ++p == pe )
 		goto _test_eof108;
 case 108:
-#line 303 "core/admin.m"
+#line 302 "core/admin.m"
 	goto st0;
 tr14:
-#line 208 "core/admin.rl"
+#line 207 "core/admin.rl"
 	{slab_validate(); ok(out);}
 	goto st7;
 tr21:
-#line 198 "core/admin.rl"
-	{return 0;}
+#line 197 "core/admin.rl"
+	{return;}
 	goto st7;
 tr26:
-#line 145 "core/admin.rl"
+#line 144 "core/admin.rl"
 	{
 			start(out);
 			tbuf_append(out, help, strlen(help));
@@ -318,9 +317,9 @@ tr26:
 		}
 	goto st7;
 tr37:
-#line 193 "core/admin.rl"
+#line 192 "core/admin.rl"
 	{strend = p;}
-#line 151 "core/admin.rl"
+#line 150 "core/admin.rl"
 	{
 			strstart[strend-strstart]='\0';
 			start(out);
@@ -329,7 +328,7 @@ tr37:
 		}
 	goto st7;
 tr44:
-#line 158 "core/admin.rl"
+#line 157 "core/admin.rl"
 	{
 			if (reload_cfg(err))
 				fail(out, err);
@@ -338,11 +337,11 @@ tr44:
 		}
 	goto st7;
 tr67:
-#line 206 "core/admin.rl"
+#line 205 "core/admin.rl"
 	{coredump(60); ok(out);}
 	goto st7;
 tr76:
-#line 165 "core/admin.rl"
+#line 164 "core/admin.rl"
 	{
 			int ret = snapshot(NULL, 0);
 
@@ -357,7 +356,7 @@ tr76:
 		}
 	goto st7;
 tr93:
-#line 127 "core/admin.rl"
+#line 126 "core/admin.rl"
 	{
 			tarantool_cfg_iterator_t *i;
 			char *key, *value;
@@ -377,30 +376,30 @@ tr93:
 		}
 	goto st7;
 tr107:
-#line 201 "core/admin.rl"
+#line 200 "core/admin.rl"
 	{start(out); fiber_info(out); end(out);}
 	goto st7;
 tr113:
-#line 200 "core/admin.rl"
+#line 199 "core/admin.rl"
 	{start(out); tarantool_info(out); end(out);}
 	goto st7;
 tr118:
-#line 204 "core/admin.rl"
+#line 203 "core/admin.rl"
 	{start(out); palloc_stat(out); end(out);}
 	goto st7;
 tr126:
-#line 203 "core/admin.rl"
+#line 202 "core/admin.rl"
 	{start(out); slab_stat(out); end(out);}
 	goto st7;
 tr130:
-#line 205 "core/admin.rl"
+#line 204 "core/admin.rl"
 	{start(out); stat_print(out);end(out);}
 	goto st7;
 st7:
 	if ( ++p == pe )
 		goto _test_eof7;
 case 7:
-#line 404 "core/admin.m"
+#line 403 "core/admin.m"
 	if ( (*p) == 10 )
 		goto st108;
 	goto st0;
@@ -553,28 +552,28 @@ case 23:
 	}
 	goto tr33;
 tr33:
-#line 193 "core/admin.rl"
+#line 192 "core/admin.rl"
 	{strstart = p;}
 	goto st24;
 st24:
 	if ( ++p == pe )
 		goto _test_eof24;
 case 24:
-#line 564 "core/admin.m"
+#line 563 "core/admin.m"
 	switch( (*p) ) {
 		case 10: goto tr36;
 		case 13: goto tr37;
 	}
 	goto st24;
 tr34:
-#line 193 "core/admin.rl"
+#line 192 "core/admin.rl"
 	{strstart = p;}
 	goto st25;
 st25:
 	if ( ++p == pe )
 		goto _test_eof25;
 case 25:
-#line 578 "core/admin.m"
+#line 577 "core/admin.m"
 	switch( (*p) ) {
 		case 10: goto tr36;
 		case 13: goto tr37;
@@ -1461,7 +1460,7 @@ case 107:
 	_out: {}
 	}
 
-#line 214 "core/admin.rl"
+#line 213 "core/admin.rl"
 
 
 	tbuf_ltrim(fiber->rbuf, (void *)pe - (void *)fiber->rbuf->data);
@@ -1472,7 +1471,7 @@ case 107:
 		end(out);
 	}
 
-	return fiber_write(out->data, out->size);
+	fiber_write(out->data, out->size);
 }
 
 static void
@@ -1484,8 +1483,7 @@ admin_handler(void *data __attribute__((unused)))
 	fiber_setcancelstate(true);
 	@try {
 		for (;;) {
-			if (admin_dispatch(L) <= 0)
-				return;
+			admin_dispatch(L);
 			fiber_gc();
 		}
 	} @finally {
