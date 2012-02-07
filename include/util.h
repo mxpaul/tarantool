@@ -28,6 +28,7 @@
 #include "config.h"
 
 #include <unistd.h>
+#include <string.h>
 #include <inttypes.h>
 
 #ifndef MAX
@@ -139,5 +140,27 @@ void symbols_free();
 void assert_fail(const char *assertion, const char *file,
 		 unsigned int line, const char *function) __attribute__ ((noreturn));
 #endif
+
+enum {
+	TD_SYSERR_BUF = 256,
+};
+
+static inline const char *td_strerror(int errcode)
+{
+	static __thread char error_msg[TD_SYSERR_BUF];
+#if (_POSIX_C_SOURCE >= 200112L || _XOPEN_SOURCE >= 600) && ! _GNU_SOURCE
+	if (strerror_r(errcode, error_msg, TD_SYSERR_BUF) != 0)
+		if (errno == ERANGE)
+			snprintf(error_msg, TD_SYSERR_BUF,
+				 "Insufficient storage was supplied to contain "
+				 "the error description string");
+		else
+			snprintf(error_msg, TD_SYSERR_BUF, "Unknown error %d",
+				 errcode);
+	return error_msg;
+#else
+	return strerror_r(errcode, error_msg, TD_SYSERR_BUF);
+#endif
+}
 
 #endif /* TARANTOOL_UTIL_H_INCLUDED */

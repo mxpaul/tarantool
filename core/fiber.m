@@ -68,11 +68,10 @@
 
 	va_list ap;
 	va_start(ap, fmt_arg);
-	int result = vsnprintf(msg, TNT_ERRMSG_MAX, fmt_arg, ap);
-	va_end(ap);
-
+	int result = vsnprintf(msg, TD_EXCEPTION_MSG_MAX, fmt_arg, ap);
 	if (result < 0)
-		say_syserror("can't format exception message");
+		say_syserror("vsnprinf fail");
+	va_end(ap);
 
 	return self;
 }
@@ -82,28 +81,28 @@
 	[super init];
 
 	char *msg_ptr = msg;
-	size_t msg_len = TNT_ERRMSG_MAX;
+	size_t msg_len = TD_EXCEPTION_MSG_MAX;
 
+	/* format arguments */
 	va_list ap;
 	va_start(ap, fmt_arg);
 	int result = vsnprintf(msg_ptr, msg_len, fmt_arg, ap);
-	va_end(ap);
-
 	if (result < 0) {
-		say_syserror("can't format exception message");
+		say_syserror("vsnprinf fail");
 		result = 0;
 	} else if (result > msg_len) {
+		/* vsnprintf can return value greater than buffer len */
 		result = msg_len;
 	}
 	msg_ptr += result;
 	msg_len -= result;
+	va_end(ap);
 
-	char error_msg_buf[64];
-	char *error_msg = strerror_r(errnum_arg, error_msg_buf,
-				     sizeof(error_msg_buf));
-	result = snprintf(msg_ptr, msg_len, ": %s", error_msg);
+	/* append string error message */
+	result = snprintf(msg_ptr, msg_len, ": %s (%i)",
+			  td_strerror(errnum_arg), errnum_arg);
 	if (result < 0)
-		say_syserror("can't format exception message");
+		say_syserror("snprinf fail");
 
 	return self;
 }

@@ -38,8 +38,6 @@ struct errcode_record {
 	uint8_t errflags;
 };
 
-enum { TNT_ERRMSG_MAX = 512 };
-
 /*
  * To add a new error code to Tarantool, extend this array. Please
  * try to reuse empty slots (ER_UNUSED*), if there are any left.

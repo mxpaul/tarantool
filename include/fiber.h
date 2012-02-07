@@ -58,7 +58,7 @@
 
 @interface FiberException: tnt_Exception {
 @public
-	char msg[TNT_ERRMSG_MAX];
+	char msg[TD_EXCEPTION_MSG_MAX];
 }
 
 - (id) init: (char *)fmt_arg, ...;

@@ -33,6 +33,10 @@
 #include "errcode.h"
 #include "say.h"
 
+enum {
+	TD_EXCEPTION_MSG_MAX = 256,
+};
+
 /** The base class for all exceptions.
  *
  * Note: implements garbage collection (see +alloc
@@ -53,7 +57,7 @@
 @interface ClientError: tnt_Exception {
 	@public
 		uint32_t errcode;
-		char errmsg[TNT_ERRMSG_MAX];
+		char errmsg[TD_EXCEPTION_MSG_MAX];
 }
 
 - (id) init: (uint32_t)errcode_, ...;
