@@ -7,6 +7,7 @@ add_custom_target(test-force
 add_subdirectory(unit)
 add_subdirectory(box)
 add_subdirectory(connector_c)
+add_subdirectory(debugsync)
 
 if ("${CPACK_GENERATOR}" STREQUAL "RPM")
     install (FILES ${CMAKE_SOURCE_DIR}/test/share/tarantool_rpm.cfg

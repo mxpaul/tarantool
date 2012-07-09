@@ -92,7 +92,7 @@ add_library(core STATIC ${common_sources})
 add_dependencies(core generate_headers)
 set_target_properties(core PROPERTIES COMPILE_FLAGS "${core_cflags}")
 
-set (common_libraries cfg core ev coro gopt misc)
+set (common_libraries cfg core ev coro gopt misc debugsync)
 
 set (THREAD_LIB pthread)
 if (ENABLE_STATIC)
