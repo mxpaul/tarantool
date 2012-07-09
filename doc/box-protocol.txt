@@ -353,8 +353,8 @@ Tarantool/Box IPROTO protocol.
 ;
 ; In case of an error, <call_response_body> always contains
 ; <return_code>. If it's not 0, it is followed by an
-; error message. Otherwise, the response, just like in case of
-; SELECT, is a sequence of <fq_tuple>s.
+; error message (<field>). Otherwise, the response, just like in
+; case of SELECT, is a sequence of <fq_tuple>s.
 <call_response_body> ::= <select_response_body>
 
 ;
