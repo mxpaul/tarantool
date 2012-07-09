@@ -42,6 +42,7 @@
 #include <tbuf.h>
 #include <util.h>
 #include <errinj.h>
+#include <test/debugsync/debugsync.h>
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -62,7 +63,14 @@ static const char *help =
 	" - lua command" CRLF
 	" - reload configuration" CRLF
 	" - show injections (debug mode only)" CRLF
-	" - set injection <name> <state> (debug mode only)" CRLF;
+	" - set injection <name> <state> (debug mode only)" CRLF
+	" - show debugsync" CRLF
+	" - debugsync activate" CRLF
+	" - debugsync deactivate" CRLF
+	" - debugsync enable <syncpoint>" CRLF
+	" - debugsync disable <syncpoint>" CRLF
+	" - debugsync wait <syncpoint>" CRLF
+	" - debugsync unblock <syncpoint>" CRLF;
 
 static const char *unknown_command = "unknown command. try typing help." CRLF;
 
@@ -219,6 +227,7 @@ admin_dispatch(lua_State *L)
 		mod = "mo"("d")?;
 		palloc = "pa"("l"("l"("o"("c")?)?)?)?;
 		stat = "st"("a"("t")?)?;
+		debugsync = "debug"("s"("y"("n"("c")?)?)?)?;
 
 		help = "h"("e"("l"("p")?)?)?;
 		exit = "e"("x"("i"("t")?)?)? | "q"("u"("i"("t")?)?)?;
@@ -252,6 +261,7 @@ admin_dispatch(lua_State *L)
 			    save " "+ coredump		%{coredump(60); ok(out);}			|
 			    save " "+ snapshot		%save_snapshot					|
 			    check " "+ slab		%{slab_validate(); ok(out);}			|
+			    show " "+ debugsync		%{start(out); ds_info(out); end(out);}		|
 			    reload " "+ configuration	%reload_configuration);
 
 	        main := commands eol;

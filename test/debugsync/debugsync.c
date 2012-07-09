@@ -1,4 +1,29 @@
-/* @(#) debugsync facility - compile with -std=gnu99 */
+/*
+ * Copyright (C) 2010 Mail.RU
+ * Copyright (C) 2010 Yuriy Vostrikov
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
+
 
 #include <sys/types.h>
 #include <string.h>
@@ -10,6 +35,7 @@
 #include <tarantool.h>
 #include <tarantool_pthread.h>
 #include <say.h>
+#include <tbuf.h>
 
 #include "debugsync.h"
 
@@ -66,7 +92,7 @@ static struct ds_global {
 /** True if debug sync is inactive.
  * @return true if the framework is disabled (inactive).
  */
-inline static bool inactive() { return ds.activation & DS_INACTIVE; }
+inline static bool inactive() { return (ds.activation & DS_ACTIVE) == 0; }
 
 
 /** True if debug sync is inactive AND activation is local.
@@ -75,7 +101,7 @@ inline static bool inactive() { return ds.activation & DS_INACTIVE; }
 inline static bool
 local_inactive()
 {
-	return ds.activation & (DS_INACTIVE | DS_LOCAL_ACTIVATION);
+	return (ds.activation & (DS_ACTIVE | DS_GLOBAL)) == 0;
 }
 
 
@@ -86,9 +112,9 @@ inline static void
 do_activate(bool activate)
 {
 	if (activate)
-		ds.activation &= ~DS_INACTIVE;
+		ds.activation |= DS_ACTIVE;
 	else
-		ds.activation |= DS_INACTIVE;
+		ds.activation &= ~DS_ACTIVE;
 }
 
 
@@ -194,8 +220,6 @@ acquire(const char *point_name)
 int
 ds_init(u_int32_t activation_flags)
 {
-	(void) memset(&ds.point[0], 0, sizeof(ds.point));
-
 	ds.activation	= activation_flags;
 	ds.count	= 0;
 
@@ -426,6 +450,28 @@ ds_unblock(const char *point_name)
 	return pt ? rc : -1;
 }
 
+
+void
+ds_info(struct tbuf *out)
+{
+	tt_pthread_mutex_lock(&ds.mtx);
+	do {
+		if (inactive()) {
+			tbuf_printf(out, "Debug syncronization is DISABLED", CRLF);
+			break;
+		}
+
+		tbuf_printf(out, "Debug syncronization - %lu sync points:" CRLF,
+			(unsigned long)ds.count);
+		for(size_t i = 0; i < ds.count; ++i)
+			tbuf_printf(out, "  - %s: %s, %s, %lu blocks" CRLF,
+				ds.point[i].name,
+				ds.point[i].is_enabled ? "enabled" : "disabled",
+				ds.point[i].in_syncwait ? "engaged" : "idle", 
+				(unsigned long)ds.point[i].nblocked);
+	} while(0);
+	tt_pthread_mutex_unlock(&ds.mtx);
+}
 
 /* __EOF__ */
 
