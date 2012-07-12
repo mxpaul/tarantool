@@ -66,27 +66,6 @@ static struct fiber **sp, *call_stack[FIBER_CALL_STACK];
 static uint32_t last_used_fid;
 static struct palloc_pool *ex_pool;
 
-/**********************/
-
-struct fiber_ref {
-	struct fiber		*ptr;
-	SLIST_ENTRY(fiber_ref)	link;
-};
-
-struct fiber_cond {
-	/** Index in the registry + 1; 0 = unused. */
-	int				index;
-	SLIST_HEAD(, fiber_ref)		blocked;
-};
-
-static struct cond_registry {
-	ev_io			io;
-	int			pipefd[2];
-	struct	fiber_cond	cond[COND_WAITERS_MAX];
-} fcond_registry;
-
-/**********************/
-
 
 struct fiber_cleanup {
 	void (*handler) (void *data);
@@ -438,101 +417,6 @@ fiber_gc(void)
 
 	prelease(ex_pool);
 }
-
-/**********************/
-
-int
-fiber_cond_init(struct fiber_cond_t **fcond)
-{
-	size_t i = 0;
-	for(;; ++i) {
-		if (i >= COND_WAITERS_MAX) {
-			say_error("Failed to create new fiber condition.");
-			return -1;
-		}
-		else if (fcond_registry.cond[i].index <= 0)
-			break;
-	}
-
-	fcond_registry[i].index = i + 1;
-	SLIST_FIRST(fcond_registry[i].blocked) = NULL;
-
-	*fcond = &fcond_registry[i];
-	return 0;
-}
-
-
-int
-fiber_cond_destroy(struct fiber_cond *fcond)
-{
-	assert(fcond->index > 0);
-
-	if (SLIST_EMPTY(fcond->blocked) == false) {
-		say_warn("Destroying fiber condition with waiters.");
-
-		struct fiber_ref *ref = NULL;
-		SLIST_FOREACH(ref, fcond->blocked, link)
-			free(ref); /* TODO: free */
-	}
-
-	fcond->index  = 0; /* Unused now. */
-	return 0;
-}
-
-
-int
-fiber_cond_wait(struct fiber_cond *fcond)
-{
-	assert(fcond->index > 0);
-
-	struct fiber_ref *ref = malloc(sizeof(ref)); /* TODO: malloc */
-	assert(ref); /* TODO: handle properly */
-	
-	SLIST_INSERT_HEAD(fcond->blocked, ref, link);
-
-	fiber_yield();
-	fiber_testcancel();
-
-	return 0;
-}
-
-
-static int
-fiber_cond_raise(char op, struct fiber_cond *fcond)
-{
-	struct cond_dgram {char	op; int	index;} dgram = {'\0', 0};
-
-	assert(op == 'B' || op == 'S');
-	dgram.op = op;
-
-	assert(fcond->index > 0);
-	dgram.index = fcond->index;
-
-	/* TODO: make sure the pipe is non-blocking */
-	ssize_t nwr = write(fcond_registry.pipefd[1], &dgram, sizeof(dgram));
-	assert(nwr == sizeof(dgram)); /* TODO: proper handling */
-
-	return 0;
-}
-
-
-int
-fiber_cond_signal(struct fiber_cond *fcond)
-{
-	return fiber_cond_raise('S', fcond);
-}
-
-
-int
-fiber_cond_signal(struct fiber_cond *fcond)
-{
-	return fiber_cond_raise('B', fcond);
-}
-
-/* TODO: add global initialization (registry, pipefd, etc), ev_io handler. */
-
-
-/**********************/
 
 
 /** Destroy the currently active fiber and prepare it for reuse.
