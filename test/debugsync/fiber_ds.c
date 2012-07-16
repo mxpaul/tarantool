@@ -49,12 +49,18 @@ struct fiber_syncpt {
 	char			*name;
 	/** Enabled state indicator. */
 	bool			is_enabled;
-	/** Index in the ds + 1; 0 = unused. */
-	int			index;
-	/** Fibers blocked on the variable. */
-	struct fiber_ref	*blocked;
-	/** # of active waiting sections. */
-	size_t 			nblocked;
+
+	/** Sync point is locked. */
+	bool			is_busy;
+
+	/** The fiber where the syncpt is being run. */
+	struct fiber		*host_fiber;
+
+	/** Number of fibers holding locks on syncpt. */
+	size_t			host_locks;
+
+	/** Fibers waiting on the variable. */
+	struct fiber_ref	*waiting;
 };
 
 
@@ -65,14 +71,18 @@ enum {
 
 
 static struct syncpt_ds {
+	/** libev IO handle. */
 	ev_io			io;
+
+	/** Event notification pipe. */
 	int			pipefd[2];
 
 	/**  Activation control flags (see header for details). */
 	u_int32_t		activation;
 
+	/** Declared synchronization points. */
 	struct	fiber_syncpt	point[MAX_FIBER_SYNCPT];
-	size_t 			count;
+	size_t 			point_count;
 } ds;
 
 
@@ -102,91 +112,195 @@ do_activate(bool activate)
 }
 
 
-void
-fds_init()
+/* --- */
+
+static int
+fiber_syncpt_wait(struct fiber_syncpt *pt)
 {
-	ds.activation	= activation_flags;
-	ds.count	= 0;
+	struct fiber_ref *ref = calloc(1, sizeof(ref)); /* TODO: malloc */
+	if (ref == NULL)
+		panic("%s: failed to create fiber condition reference", __func__);
 
-	if (pipe(ds.pipefd) != 0 ||
-	     set_nonblock(ds.pipefd[0]) != 0 ||
-	     set_nonblock(ds.pipefd[0]) != 0)
-			panic("Error setting up fiber-syncpoint "
-				"event pipe");
+	assert(pt->index > 0);
+	ref->target = fiber; /* Current fiber. */
 
-	ev_io_init(&ds.io, (void*)&fiber_syncpt_cb,
-		ds.pipefd[0], EV_READ);
+	/* Head insert. */
+	ref->next = pt->waiting;
+	pt->waiting = ref;
 
-	 ev_io_start(&ds.io);
+	say_debug("%s: fiber %p will now block on syncpoint %s",
+		__func__, (void*)fiber, pt->name);
 
-	 say_debug("%s: done", __func__);
+	fiber_yield();
+	fiber_testcancel();
+
+	say_debug("%s: fiber %p woke up on syncpoint %s",
+		__func__, (void*)fiber, pt->name);
+	return 0;
 }
 
 
-void
-fds_destroy()
+static int
+fiber_syncpt_hold(struct fiber_syncpt *pt)
 {
-	ev_io_stop(&ds.io);
+	pt->host_fiber = fiber;
+	say_debug("%s: host fiber %p will now hold at syncpoint %s",
+		__func__, (void*)fiber, pt->name);
 
-	destroy_all(); /* TODO: */
+	fiber_yield();
+	fiber_testcancel();
 
-	(void) close(ds.pipefd[0]);
-	(void) close(ds.pipefd[1]);
-
-	say_debug("%s: done", __func__);
+	say_debug("%s: fiber %p woke up on syncpoint %s",
+		__func__, (void*)fiber, pt->name);
+	return 0;
 }
 
 
-int
-fds_wait(const char *point_name)
+static int
+fiber_syncpt_raise(char op, struct fiber_syncpt *pt)
 {
-	int rc = 0;
+	struct cond_dgram dgram = {'\0', 0};
 
-	if (inactive())
-		return 0;
+	assert(op == 'B' || op == 'U');
+	/* TODO: implement 'U' == unlock */
+	dgram.op = op;
 
-	struct fiber_syncpt *pt = NULL;
-	do {
-		pt = acquire(point_name); /* TODO */
-		if (pt == NULL)
-			return -1;
+	dgram.index = pt - &ds.point[0];
 
-		rc = fiber_syncpt_wait(pt);	/* TODO: must inc nblocked */
-		if (rc)
-			break;
+	say_debug("%s: raising [%c] syncpoint %s [index=%d]",
+		__func__, op, pt->name, dgram.index);
 
-		if (!pt->is_enabled) {
-			rc = -1;
-			break;
-		}
-	} while(0);
-
-	return rc;
+	ssize_t nwr = write(ds.pipefd[1], &dgram, sizeof(dgram));
+	if (nwr != sizeof(dgram)) {
+		say_error("Error writing to fiber-condition pipe, nwr=%ld",
+			(long)nwr);
+		return -1;
+	}
+	return 0;
 }
 
 
-/* ==================================== */
-
-
-static inline bool
-valid_dgram(struct ds_dgram *dgram)
+inline static int
+fiber_syncpt_broadcast(struct fiber_syncpt *pt)
 {
-	do {
-		if (dgram->op != 'B' && dgram->op != 'S')
-			break;
-	
-		if (dgram->index <= 0 || dgram->index > MAX_FIBER_SYNCPT)
-			break;
+	return fiber_syncpt_raise('B', pt);
+}
 
-		if (ds.point[dgram->index - 1].index != dgram->index)
-			break;
+inline static int
+fiber_syncpt_unlock(struct fiber_syncpt *pt)
+{
+	return fiber_syncpt_raise('U', pt);
+}
 
-		return true;
-	} while(0);
+/** Create a new sync point.
+ *
+ * @param point_name Name of the new sync point.
+ *
+ * @return pointer to the newly-created sync point or NULL.
+ */
+static struct fiber_syncpt*
+create_new(const char *point_name)
+{
+	if (ds.point_count >= DS_MAX_POINT_COUNT)
+		return NULL;
 
-	say_error("Datagram verification failed: D=[op=%c, index=%d], cond.index=%d\n",
-		dgram->op, dgram->index, ds.point[dgram->index - 1].index);
-	return false;
+	size_t i = ds.point_count;
+
+	ds.point[i].name = strndup(point_name,
+				DS_MAX_POINT_NAME_LEN);
+	if (ds.point[i].name == NULL)
+		return NULL;
+
+	ds.point[i].is_enabled = true;
+
+	ds.point[i].is_busy = false;
+	ds.point[i].waiting = NULL;
+
+	ds.point[i].host_fiber = NULL;
+	ds.point[i].host_locks = 0;
+
+	++ds.point_count;
+
+	return &ds.point[i];
+}
+
+
+
+/** Locate a sync point by name.
+ *
+ * @param point_name Name of the sync point.
+ *
+ * @return pointer to the named sync point, if found, otherwise - NULL.
+ */
+static struct fiber_syncpt*
+look_up(const char *point_name)
+{
+	/* NB: This does not scale to large ds.count, but neither
+	 * is ds.count expected to be large enough to need a faster
+	 * lookup.
+	 */
+	for(size_t i = 0; i < ds.count; ++i)
+		if (strcmp(point_name, ds.point[i].name) == 0)
+			return &ds.point[i];
+	return NULL;
+}
+
+
+/** Locate a sync point by name, create it if not found.
+ *
+ * @param point_name Name of the sync point.
+ *
+ * @return pointer to the named sync point, or NULL if error.
+ */
+static struct fiber_synct*
+acquire(const char *point_name)
+{
+	struct ds_point *pt = look_up(point_name);
+	if (pt == NULL)
+		pt = create_new(point_name);
+
+	if (pt == NULL) {
+		say_debug("%p:%s failed to get [%s]\n",
+			(void*)fiber, __func__, point_name);
+	}
+
+	return pt;
+}
+
+
+static void
+wakeup_all_blocked(struct fiber_syncpt *pt)
+{
+	/* Iteratively pass control to the fibers blocked on the syncpoint;
+	 * save pointer to the head of the list.
+	 */
+	struct fiber_ref *head = pt->waiting, *ref = NULL;
+
+	for(ref = head; ref != NULL; ref = ref->next) {
+		say_debug("%s: waking up fiber %p (broadcast)",
+				__func__, (void*)ref->target);
+		fiber_call(ref->target);
+	}
+
+	/* Find the item preceding the former (saved) head. */
+	struct fiber_ref *prev = NULL;
+	for(ref = pt->waiting; ref && ref != head; prev = ref, ref = ref->next);
+
+	/* Remove all after the first marked ref. */
+	while(ref) {
+		say_debug("%s: removing fiber %p from syncpoint %s",
+			__func__, (void*)ref->target, pt->name);
+		struct fiber_ref *tmp = ref->next;
+		free(ref); /* TODO */
+		ref = tmp;
+	}
+
+	/* Trim the list. */
+	if (prev)
+		prev->next = NULL;
+	else
+		fsync->waiting = NULL;
+	return;
 }
 
 
@@ -210,210 +324,233 @@ fiber_syncpt_cb(ev_watcher *watcher __attribute__((unused)), int event __attribu
 		}
 		say_debug("datagram read: op=%c, index=%d", dgram.op, dgram.index);
 
-		if (!valid_dgram(&dgram)) /* TODO: corrupt structure is a fatal error. */
-			break;
-		
-		struct fiber_syncpt *fsync = &ds.point[dgram.index - 1];
-		say_debug("%s: [%c] condition=%p", __func__, dgram.op, (void*)fsync);
+		struct fiber_syncpt *fsync = &ds.point[dgram.index];
+		say_debug("%s: [%c] point=%s", __func__, dgram.op, pt->name);
 
-		if (!fsync->blocked) {
-			say_debug("%s: no fibers are blocked on condition %p, skipping.",
-				__func__, (void*)fsync);
+		if (!fsync->waiting) {
+			say_debug("%s: no fibers are waiting on point %s, skipping.",
+				__func__, pt->name);
 			continue;
 		}
 
-		if (dgram.op == 'B') {
-			/* Call all blocked fibers, mark the refs processed. */
-			struct fiber_ref *head = fsync->blocked,
-					*ref = NULL;
-
-			for(ref = head; ref != NULL; ref = ref->next) {
-				say_debug("%s: waking up fiber %p (broadcast)",
-					__func__, (void*)ref->target);
-				fiber_call(ref->target);
-
-				ref->target = NULL; /* Mark it. */
-				say_debug("%s: marking up fiber %p", __func__, (void*)ref->target);
-			}
-
-			/* Find the first ref with ref->target == NULL, save the preceding ref. */
-			struct fiber_ref *prev = NULL;
-			for(ref = head; ref && ref->target != NULL; prev = ref, ref = ref->next);
-
-			/* Remove all after the first marked ref. */
-			while(ref) {
-				assert(ref->target);
-				say_debug("%s: removing fiber %p from condition %p",
-					__func__, (void*)ref->target, (void*)fsync);
-				struct fiber_ref *tmp = ref->next;
-				free(ref); /* TODO */
-				ref = tmp;
-			}
-
-			/* Trim the list. */
-			if (prev)
-				prev->next = NULL;
-			else
-				fsync->blocked = NULL;
+		switch (dgram.op) {
+			case 'B':
+				wakeup_all_blocked(pt);
+				break;
+			case 'U':
+				fiber_call(pt->host_fiber);
+				pt->host_fiber = NULL;
+				break;
+			default:
+				say_error("Illegal operation code: %c", dgram.op);
+				break;
 		}
-		else if (dgram.op == 'S') {
-			/* Grab the current head and call the referenced fiber. */
-			struct fiber_ref *head = fsync->blocked;
-
-			say_debug("%s: waking up fiber %p (signal)",
-					__func__, (void*)head->target);
-			fiber_call(head->target);
-
-			/* Find the element preceding the head
-			   (head before fiber_call). */
-			struct fiber_ref *prev = NULL;
-			for(struct fiber_ref *ref = fsync->blocked;
-				ref && ref != head; prev = ref, ref = ref->next);
-
-			/* Trim the list. */
-			if (prev)
-				prev->next = head->next;
-			else
-				fsync->blocked = NULL;
-
-			/* Remove the (former) head. */
-			free(head);
-		}
-
-		say_debug("%s: %s more fibers blocked on cond %p",
-			__func__, fsync->blocked ? "still" : "no",
-			(void*)fsync);
-
+		say_debug("%s: %s more fibers waiting on syncpoint %s",
+			__func__, pt->waiting ? "still" : "no", pt->name);
 	} /* while */
 
 	return;
 }
 
 
+/* --------------------- */
 
-int
-fiber_syncpt_init(struct fiber_syncpt **fsync)
+void
+fds_init()
 {
-	size_t i = 0;
-	for(;; ++i) {
-		if (i >= MAX_FIBER_SYNCPT) {
-			say_error("Failed to create new fiber condition.");
-			return -1;
-		}
-		else if (ds.point[i].index <= 0)
-			break;
-	}
+	ds.activation	= activation_flags;
+	ds.point_count	= 0;
 
-	ds.point[i].index = i + 1;
-	ds.point[i].blocked = NULL;
+	if (pipe(ds.pipefd) != 0 ||
+	     set_nonblock(ds.pipefd[0]) != 0 ||
+	     set_nonblock(ds.pipefd[0]) != 0)
+			panic("Error setting up fiber-syncpoint "
+				"event pipe");
 
-	*fsync = &ds.point[i];
+	ev_io_init(&ds.io, (void*)&fiber_syncpt_cb,
+		ds.pipefd[0], EV_READ);
 
-	say_debug("%s: condition %p [index=%d] created", __func__, (void*)*fsync,
-		ds.point[i].index);
-	return 0;
-}
+	 ev_io_start(&ds.io);
 
-
-int
-fiber_syncpt_destroy(struct fiber_syncpt *fsync)
-{
-	assert(fsync->index > 0);
-
-	if (fsync->blocked != NULL) {
-		say_warn("Destroying fiber condition %p with waiting fibers.",
-			(void*)fsync);
-		/* TODO: what do we do in such a case? wake fibers up or not? */
-
-		for (struct fiber_ref *ref = fsync->blocked; ref != NULL; ) {
-			struct fiber_ref *tmp = ref->next;
-
-			say_debug("%s: fiber %p will be detached from condition %p",
-				__func__, (void*)ref->target, (void*)fsync);
-
-			free(ref); /* TODO: malloc/free */
-			ref = tmp;
-		}
-	}
-
-	say_debug("%s: destroyed condition %p [index=%d]", __func__,
-		(void*)fsync, fsync->index);
-
-	fsync->index  = 0; /* Unused now. */
-	return 0;
+	 say_debug("%s: done", __func__);
 }
 
 
 void
-fiber_syncpt_destroy_all()
+fds_destroy()
 {
-	for(size_t i = 0; i < MAX_FIBER_SYNCPT; ++i)
-		if (ds.point[i].index > 0)
-			(void) fiber_syncpt_destroy(&ds.point[i]);
+	ev_io_stop(&ds.io);
+
+	for(size_t i = 0; i < point_count; ++i) {
+		for(struct fiber_ref *p = ds.point[i].waiting, *tmp; p;) {
+			tmp = p->next;
+			free();
+			p = tmp;
+		}
+
+		free(ds.point[i].name);
+	}
+
+	(void) close(ds.pipefd[0]);
+	(void) close(ds.pipefd[1]);
+
+	say_debug("%s: done", __func__);
 }
 
 
 int
-fiber_syncpt_wait(struct fiber_syncpt *fsync)
+fds_wait(const char *point_name)
 {
-	assert(fsync->index > 0);
+	if (inactive())
+		return 0;
 
-	struct fiber_ref *ref = calloc(1, sizeof(ref)); /* TODO: malloc */
-	if (ref == NULL)
-		panic("%s: failed to create fiber condition reference", __func__);
+	struct fiber_syncpt *pt = acquire(point_name); /* TODO */
+	if (pt == NULL)
+		return -1;
 
-	ref->target = fiber; /* Current fiber. */
+	rc = fiber_syncpt_wait(pt);	/* TODO: must inc nwaiting */
+	if (rc)
+		return rc;
 
-	/* Head insert. */
-	ref->next = fsync->blocked;
-	fsync->blocked = ref;
+	/* Woke up: can we still go? */
+	if (!pt->is_enabled)
+		return -1;
 
-	say_debug("%s: fiber %p will now block on condition %p",
-		__func__, (void*)fiber, (void*)fsync);
-
-	fiber_yield();
-	fiber_testcancel();
-
-	say_debug("%s: fiber %p woke up on condition %p",
-		__func__, (void*)fiber, (void*)fsync);
 	return 0;
 }
 
 
-static int
-fiber_syncpt_raise(char op, struct fiber_syncpt *fsync)
+int
+fs_exec(const char *point_name)
 {
-	struct ds_dgram dgram = {'\0', 0};
+	if (inactive())
+		return 0;
 
-	assert(op == 'B' || op == 'S');
-	dgram.op = op;
+	struct fiber_syncpt *pt = acquire(point_name);
+	if (pt == NULL)
+		return -1;
 
-	assert(fsync->index > 0);
-	dgram.index = fsync->index;
-
-	say_debug("%s: raising [%c] condition %p", __func__, op, (void*)fsync);
-
-	ssize_t nwr = write(ds.pipefd[1], &dgram, sizeof(dgram));
-	if (nwr != sizeof(dgram)) {
-		say_error("Error writing to fiber-condition pipe, nwr=%ld",
-			(long)nwr);
+	if (pt->is_enabled && pt->is_busy) {
+		say_debug("%p:%s [%s] is BUSY\n",
+			(void*)fiber, __func__, point_name);
 		return -1;
 	}
+
+	/* No waiters - bail out. */
+	if (pt->waiting == NULL) {
+		say_debug("%p:%s [%s] is IDLE\n",
+			(void*)fiber, __func__, point_name);
+		return 0;
+	}
+
+	/* Lock the sync point. */
+	pt->is_busy = true;
+
+	/* Wake up all fibers wating on the point. */
+	rc = fiber_syncpt_broadcast(pt);
+	if (rc)
+		return rc;
+
+	/* TODO: make sure we wake up if disabled or syncwait ended;
+	 * 	 we sure should not wake up SPORADICALLY
+	 */
+
+	/* Sleep until all waiting fibers have unlocked us. */
+	if (pt->host_locks > 0) 
+		rc = fiber_syncpt_hold(pt); /* TODO: implement */
+	
+	say_debug("%p:%s UNLOCK [%s] %s %s\n",
+			(void*)fiber, __func__, pt->name,
+			pt->is_enabled ? "enabled" : "disabled",
+			pt->is_busy ? "+S" : "-S");
+
+	/* Sync point unlocked. */
+	pt->is_busy = false;
+
+	if (!pt->is_enabled) {
+		 say_debug("%p:%s [%s] has been DISABLED\n",
+			(void*)fiber, __func__, pt->name);
+		return -1;
+	}
+
 	return 0;
 }
 
 
 int
-fiber_syncpt_signal(struct fiber_syncpt *fsync)
+fs_unlock(const char *point_name)
 {
-	return fiber_syncpt_raise('S', fsync);
+	if (inactive())
+		return 0;
+
+	struct fiber_syncpt *pt = look_up(point_name);
+	if (pt == NULL) {
+		say_debug("%p:%s [%s] does not exist\n",
+			(void*)fiber, __func__, point_name);
+		return -1;
+	}
+
+	assert(pt->host_locks > 0);
+
+	if (--pt->host_locks == 0) {
+		say_debug("%p:%s [%s] - must UNLOCK\n",
+			(void*)fiber, __func__, pt->name);
+
+		rc = fiber_syncpt_unlock(pt);
+	}
+
+	return rc;
 }
 
 
 int
-fiber_syncpt_broadcast(struct fiber_syncpt *fsync)
+fs_enable(const char *point_name, bool enable)
 {
-	return fiber_syncpt_raise('B', fsync);
+	if (inactive())
+		return 0;
+
+	struct fiber_syncpt *pt = look_up(point_name);
+	if (pt == NULL)
+		return -1;
+
+	pt->is_enabled = enable;
+
+	/* If disabled - err out pending waits. */
+	return (!pt->is_enabled && pt->nwaiting > 0)
+		? fiber_syncpt_broadcast(pt) : 0;
 }
 
+
+/** Disable all sync points, wake up pending wait sections. */
+void
+fs_disable_all()
+{
+	for (size_t i = 0; i < ds.point_count; ++i) {
+		if (!ds.point[i].is_enabled)
+			continue;
+
+		ds.point[i].is_enabled = false;
+		if (ds.point[i].nwaiting > 0)
+			fiber_syncpt_broadcast(&ds.point[i]);
+	}
+}
+
+
+void
+fs_info(struct tbuf *out)
+{
+	if (inactive()) {
+		tbuf_printf(out, "Debug syncronization is DISABLED", CRLF);
+		return;
+	}
+
+	tbuf_printf(out, "Debug syncronization - %lu sync points:" CRLF,
+		(unsigned long)ds.point_count);
+	for(size_t i = 0; i < ds.point_count; ++i)
+		tbuf_printf(out, "  - %s: %s, %s, %lu blocks" CRLF,
+			ds.point[i].name,
+			ds.point[i].is_enabled ? "enabled" : "disabled",
+			ds.point[i].is_busy ? "BUSY" : "IDLE", 
+			(unsigned long)ds.point[i].nwaiting);
+}
 
