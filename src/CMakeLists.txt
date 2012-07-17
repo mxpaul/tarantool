@@ -77,7 +77,6 @@ set (recompiled_sources
      ${CMAKE_SOURCE_DIR}/src/assoc.m
      ${CMAKE_SOURCE_DIR}/src/admin.m
      ${CMAKE_SOURCE_DIR}/src/replication.m
-     ${CMAKE_SOURCE_DIR}/src/fiber_cond.m
      ${CMAKE_SOURCE_DIR}/src/fiber.m PARENT_SCOPE)
 
 set (common_sources tbuf.m palloc.m util.m
