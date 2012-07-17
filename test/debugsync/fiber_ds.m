@@ -93,6 +93,9 @@ inline static bool inactive() { return ds.is_active == false; }
 int
 fds_activate(bool activate)
 {
+	if (activate == ds.is_active)
+		return 0;
+
 	if (!activate) {
 		for (size_t i = 0; i < ds.point_count; ++i)
 			if (ds.point[i].host_fiber || ds.point[i].waiting) {
@@ -101,7 +104,11 @@ fds_activate(bool activate)
 				return -1;
 			}
 	}
+
 	ds.is_active = activate;
+	say_debug("%s: debug syncpoint framework %s", __func__,
+		activate ? "activated" : "disabled");
+
 	return 0;
 }
 
@@ -346,8 +353,8 @@ fds_init(bool activate)
 	ds.point_count	= 0;
 
 	if (pipe(ds.pipefd) != 0 ||
-	     set_nonblock(ds.pipefd[0]) != 0 ||
-	     set_nonblock(ds.pipefd[0]) != 0)
+	     set_nonblock(ds.pipefd[0]) == -1 ||
+	     set_nonblock(ds.pipefd[1]) == -1)
 			panic("Error setting up fiber-syncpoint "
 				"event pipe");
 
@@ -500,6 +507,9 @@ fds_enable(const char *point_name, bool enable)
 void
 fds_disable_all()
 {
+	if (inactive())
+		return;
+
 	for (size_t i = 0; i < ds.point_count; ++i)
 		if (ds.point[i].is_enabled)
 			enable_syncpt(&ds.point[i], false);

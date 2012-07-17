@@ -61,6 +61,8 @@
 #include "tarantool_pthread.h"
 #include "tarantool_lua.h"
 
+#include "test/debugsync/fiber_ds.h"
+
 
 static pid_t master_pid;
 #define DEFAULT_CFG_FILENAME "tarantool.cfg"
@@ -465,6 +467,9 @@ tarantool_free(void)
 		unlink(cfg.pid_file);
 	destroy_tarantool_cfg(&cfg);
 
+	fds_disable_all();
+	fds_destroy();
+
 	fiber_free();
 	palloc_free();
 	ev_default_destroy();
@@ -482,6 +487,7 @@ initialize(double slab_alloc_arena, int slab_alloc_minimal, double slab_alloc_fa
 	if (!salloc_init(slab_alloc_arena * (1 << 30), slab_alloc_minimal, slab_alloc_factor))
 		panic_syserror("can't initialize slab allocator");
 	fiber_init();
+	fds_init(false); /* Make debugsync points disabled by default. */
 }
 
 static void

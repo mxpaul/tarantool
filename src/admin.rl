@@ -42,7 +42,7 @@
 #include <tbuf.h>
 #include <util.h>
 #include <errinj.h>
-#include <test/debugsync/debugsync.h>
+#include <test/debugsync/fiber_ds.h>
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -65,12 +65,10 @@ static const char *help =
 	" - show injections (debug mode only)" CRLF
 	" - set injection <name> <state> (debug mode only)" CRLF
 	" - show debugsync" CRLF
-	" - debugsync activate" CRLF
-	" - debugsync deactivate" CRLF
-	" - debugsync enable <syncpoint>" CRLF
-	" - debugsync disable <syncpoint>" CRLF
+	" - debugsync <state>" CRLF
+	" - debugsync <syncpoint> <state>" CRLF
 	" - debugsync wait <syncpoint>" CRLF
-	" - debugsync unblock <syncpoint>" CRLF;
+	" - debugsync unlock <syncpoint>" CRLF;
 
 static const char *unknown_command = "unknown command. try typing help." CRLF;
 
@@ -217,6 +215,54 @@ admin_dispatch(lua_State *L)
 			}
 		}
 
+		action dsync_enable {
+			strstart[strend - strstart] = '\0';
+			int rc = fds_enable(strstart, state);
+			if (rc == 0)
+				ok(out);
+			else {
+				tbuf_printf(err, "failed to %sable debug syncpoint %s [%d]",
+					state ? "en" : "dis", strstart, rc);
+				fail(out, err);
+			}
+
+		}
+
+		action dsync_activate {
+			int rc = fds_activate(state);
+			if (rc == 0)
+				ok(out);
+			else {
+				tbuf_printf(err, "failed to %sactivate debug sync framework [%d]",
+					state ? "" : "de-", rc);
+				fail(out, err);
+			}
+		}
+
+		action dsync_wait {
+			strstart[strend - strstart] = '\0';
+			int rc = fds_wait(strstart);
+			if (rc == 0)
+				ok(out);
+			else {
+				tbuf_printf(err, "failed to wait on debug syncpoint %s [%d]",
+					strstart, rc);
+				fail(out, err);
+			}
+		}
+
+		action dsync_unlock {
+			strstart[strend - strstart] = '\0';
+			int rc = fds_unlock(strstart);
+			if (rc == 0)
+				ok(out);
+			else {
+				tbuf_printf(err, "failed to unlock debug syncpoint %s [%d]",
+					strstart, rc);
+				fail(out, err);
+			}
+		}
+
 		eol = "\n" | "\r\n";
 		show = "sh"("o"("w")?)?;
 		info = "in"("f"("o")?)?;
@@ -228,6 +274,8 @@ admin_dispatch(lua_State *L)
 		palloc = "pa"("l"("l"("o"("c")?)?)?)?;
 		stat = "st"("a"("t")?)?;
 		debugsync = "debug"("s"("y"("n"("c")?)?)?)?;
+		wait = "wait";
+		unlock = "unlock";
 
 		help = "h"("e"("l"("p")?)?)?;
 		exit = "e"("x"("i"("t")?)?)? | "q"("u"("i"("t")?)?)?;
@@ -261,7 +309,11 @@ admin_dispatch(lua_State *L)
 			    save " "+ coredump		%{coredump(60); ok(out);}			|
 			    save " "+ snapshot		%save_snapshot					|
 			    check " "+ slab		%{slab_validate(); ok(out);}			|
-			    show " "+ debugsync		%{start(out); ds_info(out); end(out);}		|
+			    show " "+ debugsync		%{start(out); fds_info(out); end(out);}		|
+			    debugsync " "+ state	%dsync_activate					|
+			    debugsync " "+ name + " " + state	%dsync_enable				|
+			    debugsync " "+ wait + " " + name	%dsync_wait				|
+			    debugsync " "+ unlock + " " + name	%dsync_unlock				|
 			    reload " "+ configuration	%reload_configuration);
 
 	        main := commands eol;
