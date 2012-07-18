@@ -36,14 +36,35 @@
 #include "fiber.h"
 #include "fiber_ds.h"
 
+/** Define syncpoints using the attributes below. */
+struct syncpt_spec {
+	char	*name;
+	bool	is_enabled;
+};
 
-/** Fier-list element */
+/** Add new syncpoints here: */ 
+#define SYNCPT_LIST(_)		\
+	_(txn_commit, true)	\
+	_(txn_foo1, false)	\
+	_(txn_foo2, false)
+ENUM0(syncpt_enum, SYNCPT_LIST);
+
+#define SYNCPT_MEMBER(n, s) { .name = #n, .is_enabled = s },
+
+/** Syncpoints defined for the application: */
+static const struct syncpt_spec spec[syncpt_enum_MAX] = {
+        SYNCPT_LIST(SYNCPT_MEMBER)
+};
+
+
+/** Fiber-list element */
 struct fiber_ref {
 	struct fiber		*target;
 	struct fiber_ref	*next;
 };
 
 
+/* TODO: utilize spec[] */
 struct syncpt {
 	/** Unique name to use as ID. */
 	char			*name;
@@ -356,6 +377,8 @@ fds_init(bool activate)
 	ds.is_active	= activate;
 	ds.point_count	= 0;
 
+	/* TODO: init from spec[] */
+
 	if (pipe(ds.pipefd) != 0 ||
 	     set_nonblock(ds.pipefd[0]) == -1 ||
 	     set_nonblock(ds.pipefd[1]) == -1)
@@ -382,6 +405,7 @@ fds_destroy()
 			p = tmp;
 		}
 
+		/* TODO: revise */
 		free(ds.point[i].name);
 	}
 	ds.point_count = 0;

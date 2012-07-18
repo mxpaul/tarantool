@@ -25,47 +25,17 @@
  */
 
 
-
-/****************************************************************
- * Debug synchronization facility allows to
- * 'insert' synchronization points into multi-threaded code.
- *
- * A a synchronization gets 'inserted' before a code
- * section one wants to test (in thread A). In order to 
- * put the system into a condition suitable for the test, 
- * other threads may need to execute their test-specific
- * code sections right before the tested sections executes
- * (in thread A).
- *
- * TODO: terminology and algorithm.
- *
- *
- *
- ****************************************************************/
-
 #ifndef FIBERDS_H_20120703
 #define FIBERDS_H_20120703
 
 #include <sys/types.h>
 #include <stdbool.h>
 
-#ifdef NDEBUG
+#include "util.h"
 
-#	define  FDSYNC_ACTIVATE(activate)
-#	define	FDSYNC_SET(name)
-#	define  FDSYNC_ENABLE(name, enable)
-#	define	FDSYNC_WAIT(name)
-#	define	FDSYNC_UNBLOCK(name)
 
-#else
-
-#	define  FDSYNC_ACTIVATE(activate)	fds_activate(activate)
-#	define	FDSYNC_SET(name)		(void)fds_exec(name)
-#	define  FDSYNC_ENABLE(name, enable)	fds_enable(name, enable)
-#	define	FDSYNC_WAIT(name)		fds_wait(name)
-#	define	FDSYNC_UNBLOCK(name)		fds_unblock(name)
-
-#endif
+/** Insert synchronization point. */
+#define	FDSYNC_SET(name)	(void)fds_exec(name)
 
 #ifdef __cplusplus
 extern "C" {
