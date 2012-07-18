@@ -33,6 +33,13 @@
 
 #include "util.h"
 
+/** Add new syncpoints here: */ 
+#define SYNCPT_LIST(_)		\
+	_(SYNCPT_txn_commit, true)	\
+	_(SYNCPT_txn_foo1, false)	\
+	_(SYNCPT_txn_foo2, false)
+ENUM0(syncpt_enum, SYNCPT_LIST);
+
 
 /** Insert synchronization point. */
 #define	FDSYNC_SET(name)	(void)fds_exec(name)
@@ -80,11 +87,11 @@ void fds_disable_all();
 /**
  * Execute (pass through) a sync point.
  *
- * @param point_name name of the sync point.
+ ****** @param point_name name of the sync point.
  *
  * @return 0 if the sync point has been passed successfully, non-zero otherwise.
  */
-int fds_exec(const char *point_name);
+int fds_exec(int point_id);
 
 /**
  * Wait for a sync point (existing or a new one) to be reached.
