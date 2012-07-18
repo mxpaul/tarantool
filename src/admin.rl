@@ -64,11 +64,11 @@ static const char *help =
 	" - reload configuration" CRLF
 	" - show injections (debug mode only)" CRLF
 	" - set injection <name> <state> (debug mode only)" CRLF
-	" - show debugsync" CRLF
-	" - debugsync <state>" CRLF
-	" - debugsync <syncpoint> <state>" CRLF
-	" - debugsync wait <syncpoint>" CRLF
-	" - debugsync unlock <syncpoint>" CRLF;
+	" - show syncpt" CRLF
+	" - syncpt framework <state>" CRLF
+	" - syncpt <state> <syncpoint>" CRLF
+	" - syncpt wait <syncpoint>" CRLF
+	" - syncpt unlock <syncpoint>" CRLF;
 
 static const char *unknown_command = "unknown command. try typing help." CRLF;
 
@@ -273,9 +273,10 @@ admin_dispatch(lua_State *L)
 		mod = "mo"("d")?;
 		palloc = "pa"("l"("l"("o"("c")?)?)?)?;
 		stat = "st"("a"("t")?)?;
-		debugsync = "debug"("s"("y"("n"("c")?)?)?)?;
+		syncpt = "sy"("n"("c"("p"("t")?)?)?)?;
 		wait = "wait";
 		unlock = "unlock";
+		framework = "framework";
 
 		help = "h"("e"("l"("p")?)?)?;
 		exit = "e"("x"("i"("t")?)?)? | "q"("u"("i"("t")?)?)?;
@@ -309,11 +310,11 @@ admin_dispatch(lua_State *L)
 			    save " "+ coredump		%{coredump(60); ok(out);}			|
 			    save " "+ snapshot		%save_snapshot					|
 			    check " "+ slab		%{slab_validate(); ok(out);}			|
-			    show " "+ debugsync		%{start(out); fds_info(out); end(out);}		|
-			    debugsync " "+ state	%dsync_activate					|
-			    debugsync " "+ name + " " + state	%dsync_enable				|
-			    debugsync " "+ wait + " " + name	%dsync_wait				|
-			    debugsync " "+ unlock + " " + name	%dsync_unlock				|
+			    show " "+ syncpt		%{start(out); fds_info(out); end(out);}		|
+			    syncpt " "+ framework + " " + state	%dsync_activate				|
+			    syncpt " "+ state + " " + name	%dsync_enable				|
+			    syncpt " "+ wait + " " + name	%dsync_wait				|
+			    syncpt " "+ unlock + " " + name	%dsync_unlock				|
 			    reload " "+ configuration	%reload_configuration);
 
 	        main := commands eol;

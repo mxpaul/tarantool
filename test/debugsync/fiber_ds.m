@@ -57,6 +57,8 @@ struct syncpt {
 	ssize_t			host_locks;
 	/** List of fibers waiting on the syncpt. */
 	struct fiber_ref	*waiting;
+	/** Number of fibers waiting on the syncpt. */
+	ssize_t			wait_count;
 };
 
 
@@ -125,6 +127,7 @@ syncpt_wait(struct syncpt *pt)
 	/* Head insert. */
 	ref->next = pt->waiting;
 	pt->waiting = ref;
+	pt->wait_count++;
 
 	say_debug("%s: fiber %p will now block on syncpoint %s",
 		__func__, (void*)fiber, pt->name);
@@ -254,7 +257,7 @@ acquire(const char *point_name)
 		pt = create_new(point_name);
 
 	if (pt == NULL) {
-		say_debug("%p:%s failed to get [%s]\n",
+		say_error("%p:%s failed to acquire syncpoint [%s]\n",
 			(void*)fiber, __func__, point_name);
 	}
 
@@ -274,6 +277,7 @@ wakeup_blocked(struct syncpt *pt)
 		say_debug("%s: waking up fiber %p (broadcast)",
 				__func__, (void*)ref->target);
 		fiber_call(ref->target);
+		pt->wait_count--;
 	}
 
 	/* Find the item preceding the former (saved) head. */
@@ -451,13 +455,22 @@ fds_unlock(const char *point_name)
 
 	struct syncpt *pt = look_up(point_name);
 	if (pt == NULL) {
-		say_debug("%p:%s sync point [%s] does not exist\n",
+		say_error("%p:%s sync point [%s] does not exist\n",
 			(void*)fiber, __func__, point_name);
 		return -1;
 	}
 
-	if (--pt->host_locks <= 0) {
-		say_debug("%p:%s [%s] has %ld locks - must UNLOCK\n",
+	if (pt->host_locks <= 0) {
+		say_error("%p:%s no locks held on [%s], cannot unlock",
+			(void*)fiber, __func__, point_name);
+
+		pt->host_locks = 0;
+		return -1;
+	}
+
+	
+	if (--pt->host_locks == 0) {
+		say_debug("%p:%s [%s] has %ld locks - must UNLOCK",
 			(void*)fiber, __func__, pt->name,
 			(long)pt->host_locks);
 
@@ -497,8 +510,11 @@ fds_enable(const char *point_name, bool enable)
 		return 0;
 
 	struct syncpt *pt = look_up(point_name);
-	if (pt == NULL)
+	if (pt == NULL) {
+		say_error("%p:%s sync point [%s] does not exist\n",
+			(void*)fiber, __func__, point_name);
 		return -1;
+	}
 
 	return enable_syncpt(pt, enable);
 }
@@ -524,13 +540,14 @@ fds_info(struct tbuf *out)
 		return;
 	}
 
-	tbuf_printf(out, "Debug syncronization - %lu sync points:" CRLF,
+	tbuf_printf(out, "Debug syncronization - %lu sync points" CRLF,
 		(unsigned long)ds.point_count);
 	for(size_t i = 0; i < ds.point_count; ++i)
-		tbuf_printf(out, "  - %s: %s, %s, host_fiber=%p %ld locks" CRLF,
+		tbuf_printf(out, "  - %s: %s, %s, waiting: %ld, host: %p locks: %ld" CRLF,
 			ds.point[i].name,
 			ds.point[i].is_enabled ? "enabled" : "disabled",
 			ds.point[i].is_locked ? "locked" : "idle",
+			(long)ds.point[i].wait_count,
 			(void*)ds.point[i].host_fiber,
 			(long)ds.point[i].host_locks);
 }
