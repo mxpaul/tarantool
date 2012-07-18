@@ -400,7 +400,14 @@ fds_wait(const char *point_name)
 		return -1;
 
 	struct syncpt *pt = acquire(point_name);
-	return pt ? syncpt_wait(pt) : -1;
+	if (!pt)
+		return -1;
+		
+	int rc = syncpt_wait(pt);
+
+	fiber_testcancel();
+
+	return rc;
 }
 
 
@@ -453,6 +460,7 @@ fds_exec(const char *point_name)
 	} while(0);
 	pt->is_locked = false;
 
+	fiber_testcancel();
 
 	say_debug("%p:%s syncpoint [%s], %s/%s DONE (%d)",
 		(void*)fiber, __func__, point_name,
@@ -551,7 +559,7 @@ void
 fds_info(struct tbuf *out)
 {
 	if (inactive()) {
-		tbuf_printf(out, "Debug syncronization is DISABLED", CRLF);
+		tbuf_printf(out, "Debug syncronization is DISABLED" CRLF);
 		return;
 	}
 
