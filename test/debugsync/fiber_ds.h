@@ -60,13 +60,12 @@
 #else
 
 #	define  FDSYNC_ACTIVATE(activate)	fds_activate(activate)
-#	define	FDSYNC_SET(name)			fds_exec(name)
+#	define	FDSYNC_SET(name)		(void)fds_exec(name)
 #	define  FDSYNC_ENABLE(name, enable)	fds_enable(name, enable)
 #	define	FDSYNC_WAIT(name)		fds_wait(name)
 #	define	FDSYNC_UNBLOCK(name)		fds_unblock(name)
 
 #endif
-
 
 #ifdef __cplusplus
 extern "C" {

@@ -324,7 +324,7 @@ syncpt_cb(ev_watcher *watcher __attribute__((unused)), int event __attribute__((
 		struct syncpt *pt = &ds.point[dgram.index];
 		say_debug("%s: [%c] point=%s", __func__, dgram.op, pt->name);
 
-		if (!pt->waiting) {
+		if (!pt->waiting && !pt->host_fiber) {
 			say_debug("%s: no fibers are waiting on point %s, skipping.",
 				__func__, pt->name);
 			continue;
@@ -397,7 +397,7 @@ int
 fds_wait(const char *point_name)
 {
 	if (inactive())
-		return 0;
+		return -1;
 
 	struct syncpt *pt = acquire(point_name);
 	return pt ? syncpt_wait(pt) : -1;
@@ -413,6 +413,11 @@ fds_exec(const char *point_name)
 	struct syncpt *pt = acquire(point_name);
 	if (pt == NULL)
 		return -1;
+
+	say_debug("%p:%s syncpoint [%s], %s/%s ENTER",
+		(void*)fiber, __func__, point_name,
+		pt->is_enabled ? "enabled" : "disabled",
+		pt->is_locked ? "locked" : "idle");
 
 	if (!pt->is_enabled)
 		return 0;
@@ -432,18 +437,28 @@ fds_exec(const char *point_name)
 	pt->is_locked = true;
 	int rc = 0;
 	do {
+		ssize_t count = pt->wait_count;
+
 		rc = syncpt_wakeup(pt);
 		if (rc) break;
 
+		/* Waiters become locks after the wake-up. */
+		pt->host_locks = count;
+
 		if (pt->host_locks > 0)
 			rc = syncpt_hold(pt);
+		else
+			say_debug("%p:%s no lockers to hold for at [%s]",
+				(void*)fiber, __func__, point_name);
 	} while(0);
 	pt->is_locked = false;
 
-	if (rc)
-		return rc;
 
-	return (pt->host_locks > 0) ? syncpt_hold(pt) : 0;
+	say_debug("%p:%s syncpoint [%s], %s/%s DONE (%d)",
+		(void*)fiber, __func__, point_name,
+		pt->is_enabled ? "enabled" : "disabled",
+		pt->is_locked ? "locked" : "idle", rc);
+	return rc;
 }
 
 
@@ -451,7 +466,7 @@ int
 fds_unlock(const char *point_name)
 {
 	if (inactive())
-		return 0;
+		return -1;
 
 	struct syncpt *pt = look_up(point_name);
 	if (pt == NULL) {

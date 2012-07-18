@@ -32,6 +32,8 @@
 #include <recovery.h>
 #include <fiber.h>
 
+#include "test/debugsync/fiber_ds.h"
+
 static void
 txn_lock(struct txn *txn __attribute__((unused)), struct tuple *tuple)
 {
@@ -97,6 +99,8 @@ txn_begin()
 void
 txn_commit(struct txn *txn)
 {
+	FDSYNC_SET("txn_commit");
+
 	if (txn->op == 0) /* Nothing to do. */
 		return;
 	if (! (txn->txn_flags & BOX_NOT_STORE)) {
