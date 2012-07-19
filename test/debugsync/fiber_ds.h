@@ -25,6 +25,23 @@
  */
 
 
+/************************************************************************
+ * Fiber Debug Synchronization framework allows to introduce syncpoints
+ * into the fiber-driven code.
+ *
+ * A syncpoint has the following behavior traits:
+ *
+ *	1. Any other fiber can *wait* for it to be reached;
+ *	2. Once reached, it will *wake up* all fibers waiting for it;
+ *	3. Will *hold* for the waiting fibers, once they've woken up,
+ *	   until they have *unlocked* the syncpoint.
+ *	4. Proceed once *unlocked*.
+ *
+ * Read on the rationale for syncpoints here:
+ * http://forge.mysql.com/wiki/MySQL_Internals_Test_Synchronization#Debug_Sync_Facility
+ *
+ ************************************************************************/
+
 #ifndef FIBERDS_H_20120703
 #define FIBERDS_H_20120703
 
@@ -33,15 +50,18 @@
 
 #include "util.h"
 
-/** Add new syncpoints here: */ 
-#define SYNCPT_LIST(_)		\
-	_(SYNCPT_txn_commit, true)	\
+
+/** Add any new syncpoint := (sync_point_name, is_enabled) here: */ 
+/* TODO: replace with REAL (non-test) syncpoints */
+#define SYNCPT_LIST(_)			\
 	_(SYNCPT_txn_foo1, false)	\
-	_(SYNCPT_txn_foo2, false)
+	_(SYNCPT_txn_foo2, false)	\
+	_(SYNCPT_txn_commit, true)	\
+	_(SYNCPT_txn_foo3, true)
 ENUM0(syncpt_enum, SYNCPT_LIST);
 
 
-/** Insert synchronization point. */
+/** Use this macro to insert a synchronization point. */
 #define	FDSYNC_SET(name)	(void)fds_exec(name)
 
 #ifdef __cplusplus
@@ -49,28 +69,28 @@ extern "C" {
 #endif
 
 /**
- * Initialize debug sync framework.
+ * Initialize debug syncpoint framework, allocate resources.
  *
- * @param active if false disables all debug sync operations.
+ * @param activate if false leaves all debug sync operations disabled.
  *
  * @return 0 if framework initialized, non-zero otherwise.
  */
 void fds_init(bool activate);
 
 /**
- * Release resources allocated for debug sync framework.
+ * Release all resources allocated for debug sync framework.
  */
 void fds_destroy();
 
 /**
- * Toggle the framework's status.
+ * Toggle the framework's active/disabled status.
  *
- * @param active [dis]allows debug sync operations.
+ * @param active enables/disables debug sync framework.
  */
 int fds_activate(bool activate);
 
 /**
- * Enable or disable an existing syn point.
+ * Enable or disable an existing sync point.
  *
  * @param point_name name of the sync point.
  * @param enable enable or disable sync point's execution.
@@ -87,27 +107,27 @@ void fds_disable_all();
 /**
  * Execute (pass through) a sync point.
  *
- ****** @param point_name name of the sync point.
+ * @param point_id numeric ID of the sync point.
  *
- * @return 0 if the sync point has been passed successfully, non-zero otherwise.
+ * @return 0 if the sync point has been executed successfully.
  */
 int fds_exec(int point_id);
 
 /**
- * Wait for a sync point (existing or a new one) to be reached.
+ * Wait for a sync point to be reached.
  *
  * @param point_name name of the sync point.
  *
- * @return 0 if the sync point was successfully reached, non-zero otherwise.
+ * @return 0 if the sync point was reached in a valid state.
  */
 int fds_wait(const char *point_name);
 
 /**
- * Attempt to unlock a sync point holding for a waiting block.
+ * Attempt to unlock a sync point (holding for its waiters).
  *
  * @param point_name name of the sync point.
  *
- * @return 0 if an event to unblock has been raised successfully, non-zero otherwise.
+ * @return 0 if 'unblock' event has been raised successfully.
  */
 int fds_unlock(const char *point_name);
 
