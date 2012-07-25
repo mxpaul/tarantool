@@ -99,7 +99,7 @@ txn_begin()
 void
 txn_commit(struct txn *txn)
 {
-	FDSYNC_SET("txn_commit");
+	FDSYNC_SET(SYNCPT_txn_commit);
 
 	if (txn->op == 0) /* Nothing to do. */
 		return;

@@ -36,9 +36,27 @@
 #include "fiber_ds.h"
 
 
-/** Fier-list element */
+/** Syncpoint specification (as seen from the client side). */
+struct syncpt_spec {
+	/** Syncpoint name (to reference from test/console). */
+	char	*name;
+	/** Should it be initially enabled? */
+	bool	is_enabled;
+};
+
+#define SYNCPT_MEMBER(n, s) { .name = #n, .is_enabled = s },
+
+/** Syncpoints defined for the application: */
+static const struct syncpt_spec spec[syncpt_enum_MAX] = {
+        SYNCPT_LIST(SYNCPT_MEMBER)
+};
+
+
+/** Element of a list of fibers. */
 struct fiber_ref {
+	/** Referenced fiber. */
 	struct fiber		*target;
+	/** Next element. */
 	struct fiber_ref	*next;
 };
 
@@ -63,28 +81,24 @@ struct syncpt {
 };
 
 
-enum {
-	/** Hard limit on # of syncpoints. */
-	MAX_SYNCPT_COUNT = 255,
-	MAX_SYNCPT_NAME_LENGTH = 80
-};
-
-
+/** Module-scope variables in one structure. */
 static struct syncpt_ds {
-	/** libev IO handle. */
+	/** libev IO handle to raise events through. */
 	ev_io			io;
 	/** Event notification pipe. */
 	int			pipefd[2];
 	/**  Activation control flags (see header for details). */
 	bool			is_active;
 	/** Synchronization points. */
-	struct	syncpt		point[MAX_SYNCPT_COUNT];
-	size_t			point_count;
+	struct	syncpt		point[syncpt_enum_MAX];
 } ds;
 
 
+/** Event datagram to pass between fibers (when raising events). */
 struct syncpt_dgram {
+	/** Event operation code. */
 	char	op;
+	/** Index of the target sync point in ds.point[]. */
 	int	index;
 };
 
@@ -93,36 +107,20 @@ struct syncpt_dgram {
 static void atexit_syncpt();
 
 
+/** True if the framework is inactive. */
 inline static bool inactive() { return ds.is_active == false; }
 
 
-int
-fds_activate(bool activate)
-{
-	if (activate == ds.is_active)
-		return 0;
-
-	if (!activate) {
-		for (size_t i = 0; i < ds.point_count; ++i)
-			if (ds.point[i].host_fiber || ds.point[i].waiting) {
-				say_error("%s(%d): syncpoint %s is still active",
-					__func__, (int)activate, ds.point[i].name);
-				return -1;
-			}
-	}
-
-	ds.is_active = activate;
-	say_debug("%s: debug syncpoint framework %s", __func__,
-		activate ? "activated" : "disabled");
-
-	return 0;
-}
-
-
+/**
+ * Wait for sync point to execute.
+ *
+ * @param pt syncpoint to wait on.
+ * @return 0 if the syncpoint has been reached in a valid state.
+ */
 static int
 syncpt_wait(struct syncpt *pt)
 {
-	struct fiber_ref *ref = calloc(1, sizeof(ref)); /* TODO: malloc */
+	struct fiber_ref *ref = calloc(1, sizeof(ref));
 	if (ref == NULL)
 		panic("%s: failed to create fiber reference", __func__);
 
@@ -146,6 +144,12 @@ syncpt_wait(struct syncpt *pt)
 }
 
 
+/**
+ * Hold control at the sync point until unlocked by waiters.
+ *
+ * @param pt syncpoint holding.
+ * @return 0 if unlocked by all waiters in a valid state.
+ */
 static int
 syncpt_hold(struct syncpt *pt)
 {
@@ -168,6 +172,13 @@ syncpt_hold(struct syncpt *pt)
 }
 
 
+/**
+ * Raise (signal) event for a syncpoint.
+ *
+ * @param op operation code, specifying event type.
+ * @param pt syncpoint the event is for.
+ * @return 0 if event has been raised successfully.
+ */
 static int
 syncpt_raise(char op, struct syncpt *pt)
 {
@@ -189,86 +200,61 @@ syncpt_raise(char op, struct syncpt *pt)
 	return 0;
 }
 
-
+/** Raise 'broadcast' event: signal to wake up all syncpoint's waiters. */
 inline static int
 syncpt_wakeup(struct syncpt *pt) { return syncpt_raise('B', pt); }
 
+
+/** Raise 'unlock' event: signal to unlock the syncpoint's host fiber. */
 inline static int
 syncpt_unlock(struct syncpt *pt) { return syncpt_raise('U', pt); }
-
-
-/** Create a new sync point.
- *
- * @param point_name Name of the new sync point.
- *
- * @return pointer to the newly-created sync point or NULL.
- */
-static struct syncpt*
-create_new(const char *point_name)
-{
-	if (ds.point_count >= MAX_SYNCPT_COUNT)
-		return NULL;
-
-	size_t i = ds.point_count;
-
-	ds.point[i].name = strndup(point_name,
-				MAX_SYNCPT_NAME_LENGTH);
-	if (ds.point[i].name == NULL)
-		return NULL;
-
-	ds.point[i].is_enabled = true;
-
-	ds.point[i].is_locked = false;
-	ds.point[i].waiting = NULL;
-
-	ds.point[i].host_fiber = NULL;
-	ds.point[i].lock_count = 0;
-
-	++ds.point_count;
-
-	return &ds.point[i];
-}
 
 
 /** Locate a sync point by name.
  *
  * @param point_name Name of the sync point.
+ * @param caller symbolic tag for the caller function.
  *
  * @return pointer to the named sync point, if found, otherwise - NULL.
  */
 static struct syncpt*
-look_up(const char *point_name)
+look_up(const char *point_name, const char *caller)
 {
-	/* NB: This does not scale to large point_count. */
-	for(size_t i = 0; i < ds.point_count; ++i)
+	for(size_t i = 0; i < syncpt_enum_MAX; ++i)
 		if (strcmp(point_name, ds.point[i].name) == 0)
 			return &ds.point[i];
+
+	say_error("%p:%s sync point [%s] does not exist",
+		(void*)fiber, caller, point_name);
 	return NULL;
 }
+#define LOOK_UP(name)	look_up(name, __func__)
 
-
-/** Locate a sync point by name, create it if not found.
+/**
+ * Check if the syncpoint is enabled, output an error message otherwise.
  *
  * @param point_name Name of the sync point.
+ * @param caller symbolic tag for the caller function.
  *
- * @return pointer to the named sync point, or NULL if error.
+ * @return true if the sync point is enabled.
  */
-static struct syncpt*
-acquire(const char *point_name)
+static inline bool
+verify_enabled(const struct syncpt *pt, const char *caller)
 {
-	struct syncpt *pt = look_up(point_name);
-	if (pt == NULL)
-		pt = create_new(point_name);
-
-	if (pt == NULL) {
-		say_error("%p:%s failed to acquire syncpoint [%s]\n",
-			(void*)fiber, __func__, point_name);
+	if (!pt->is_enabled) {
+		say_error("%p:%s sync point [%s] is disabled",
+			(void*)fiber, caller, pt->name);
 	}
-
-	return pt;
+	return pt->is_enabled;
 }
+#define VERIFY_ENABLED(pt)	verify_enabled(pt, __func__)
 
 
+/**
+ * Wake up all 'waiters' (fibers) blocked on a syncpoint.
+ *
+ * @param pt the syncpoint waited on.
+ */
 static void
 wakeup_blocked(struct syncpt *pt)
 {
@@ -304,6 +290,9 @@ wakeup_blocked(struct syncpt *pt)
 }
 
 
+/**
+ * Process libio's syncpoint-related IO event(s).
+ */
 static void
 syncpt_cb(ev_watcher *watcher __attribute__((unused)), int event __attribute__((unused)))
 {
@@ -341,7 +330,8 @@ syncpt_cb(ev_watcher *watcher __attribute__((unused)), int event __attribute__((
 				pt->host_fiber = NULL;
 				break;
 			default:
-				say_error("Illegal operation code: %c", dgram.op);
+				say_error("Illegal syncpoint operation code: %c",
+					dgram.op);
 				break;
 		}
 		say_debug("%s: %s more fibers waiting on syncpoint %s",
@@ -355,8 +345,19 @@ syncpt_cb(ev_watcher *watcher __attribute__((unused)), int event __attribute__((
 void
 fds_init(bool activate)
 {
-	ds.is_active	= activate;
-	ds.point_count	= 0;
+	ds.is_active = activate;
+
+	struct syncpt *pt = &ds.point[0];
+	for (size_t i = 0; i < syncpt_enum_MAX; ++i, ++pt) {
+		pt->name	= spec[i].name;
+		pt->is_enabled	= spec[i].is_enabled;
+		pt->is_locked	= false;
+		pt->host_fiber	= NULL;
+		pt->waiting	= NULL;
+		pt->waiting_count = 0;
+		pt->locking	= NULL;
+		pt->lock_count	= 0;
+	}
 
 	if (pipe(ds.pipefd) != 0 ||
 	     set_nonblock(ds.pipefd[0]) == -1 ||
@@ -377,16 +378,13 @@ fds_destroy()
 {
 	ev_io_stop(&ds.io);
 
-	for(size_t i = 0; i < ds.point_count; ++i) {
+	for(size_t i = 0; i < syncpt_enum_MAX; ++i) {
 		for(struct fiber_ref *p = ds.point[i].waiting, *tmp; p;) {
 			tmp = p->next;
 			free(p);
 			p = tmp;
 		}
-
-		free(ds.point[i].name);
 	}
-	ds.point_count = 0;
 
 	(void) close(ds.pipefd[0]);
 	(void) close(ds.pipefd[1]);
@@ -396,16 +394,39 @@ fds_destroy()
 
 
 int
+fds_activate(bool activate)
+{
+	if (activate == ds.is_active)
+		return 0;
+
+	if (!activate) {
+		for (size_t i = 0; i < syncpt_enum_MAX; ++i)
+			if (ds.point[i].host_fiber || ds.point[i].waiting) {
+				say_error("%s(%d): syncpoint %s is still active",
+					__func__, (int)activate, ds.point[i].name);
+				return -1;
+			}
+	}
+
+	ds.is_active = activate;
+	say_debug("%s: debug syncpoint framework %s", __func__,
+		activate ? "activated" : "disabled");
+
+	return 0;
+}
+
+
+int
 fds_wait(const char *point_name)
 {
 	if (inactive())
 		return -1;
 
-	fiber_atexit(&atexit_syncpt);
-
-	struct syncpt *pt = acquire(point_name);
-	if (!pt)
+	struct syncpt *pt = LOOK_UP(point_name);
+	if (pt == NULL || VERIFY_ENABLED(pt) == false)
 		return -1;
+
+	fiber_atexit(&atexit_syncpt);
 
 	int rc = syncpt_wait(pt);
 
@@ -416,19 +437,19 @@ fds_wait(const char *point_name)
 
 
 int
-fds_exec(const char *point_name)
+fds_exec(int point_id)
 {
 	if (inactive())
 		return 0;
 
+	assert(point_id >= 0 && point_id < syncpt_enum_MAX);
+
 	fiber_atexit(&atexit_syncpt);
 
-	struct syncpt *pt = acquire(point_name);
-	if (pt == NULL)
-		return -1;
+	struct syncpt *pt = &ds.point[point_id];
 
 	say_debug("%p:%s syncpoint [%s], %s/%s ENTER",
-		(void*)fiber, __func__, point_name,
+		(void*)fiber, __func__, pt->name,
 		pt->is_enabled ? "enabled" : "disabled",
 		pt->is_locked ? "locked" : "idle");
 
@@ -437,13 +458,13 @@ fds_exec(const char *point_name)
 
 	if (pt->is_locked) {
 		say_debug("%p:%s [%s] is LOCKED\n",
-			(void*)fiber, __func__, point_name);
+			(void*)fiber, __func__, pt->name);
 		return -1;
 	}
 
 	if (pt->waiting == NULL) {
-		say_debug("%p:%s [%s] has no waiters, skipping\n",
-			(void*)fiber, __func__, point_name);
+		say_debug("%p:%s [%s] has no waiters, skipping",
+			(void*)fiber, __func__, pt->name);
 		return 0;
 	}
 
@@ -457,16 +478,17 @@ fds_exec(const char *point_name)
 			rc = syncpt_hold(pt);
 		else
 			say_debug("%p:%s no lockers to hold for at [%s]",
-				(void*)fiber, __func__, point_name);
+				(void*)fiber, __func__, pt->name);
 	} while(0);
 	pt->is_locked = false;
 
 	fiber_testcancel();
 
 	say_debug("%p:%s syncpoint [%s], %s/%s DONE (%d)",
-		(void*)fiber, __func__, point_name,
+		(void*)fiber, __func__, pt->name,
 		pt->is_enabled ? "enabled" : "disabled",
 		pt->is_locked ? "locked" : "idle", rc);
+
 	return rc;
 }
 
@@ -526,12 +548,9 @@ fds_unlock(const char *point_name)
 	if (inactive())
 		return -1;
 
-	struct syncpt *pt = look_up(point_name);
-	if (pt == NULL) {
-		say_error("%p:%s sync point [%s] does not exist\n",
-			(void*)fiber, __func__, point_name);
+	struct syncpt *pt = LOOK_UP(point_name);
+	if (pt == NULL || VERIFY_ENABLED(pt) == false)
 		return -1;
-	}
 
 	if (pt->lock_count <= 0) {
 		say_error("%p:%s no locks held on [%s], cannot unlock",
@@ -594,7 +613,7 @@ atexit_syncpt()
 		return;
 
 	struct syncpt *pt = &ds.point[0];
-	for (size_t i = 0; i < MAX_SYNCPT_COUNT; ++i, ++pt) {
+	for (size_t i = 0; i < syncpt_enum_MAX; ++i, ++pt) {
 		if (!pt->is_enabled)
 			continue;
 		/* Is this the syncpoint's host? */
@@ -612,14 +631,22 @@ atexit_syncpt()
 }
 
 
+/**
+ * Enable or disable a syncpoint.
+ *
+ * @param pt syncpoint to enable/disable.
+ * @param enable if true, enable syncpoint, otherwise disable.
+ */
 static int
 enable_syncpt(struct syncpt *pt, bool enable)
 {
-	int rc = 0;
-	bool was_enabled = pt->is_enabled;
+	if (enable == pt->is_enabled)
+		return 0;
+
 	pt->is_enabled = enable;
 
-	if (was_enabled && !pt->is_enabled) {
+	int rc = 0;
+	if (!pt->is_enabled) {
 		if (pt->waiting != NULL)
 			rc = syncpt_wakeup(pt);
 
@@ -633,19 +660,15 @@ enable_syncpt(struct syncpt *pt, bool enable)
 }
 
 
-
 int
 fds_enable(const char *point_name, bool enable)
 {
 	if (inactive())
 		return 0;
 
-	struct syncpt *pt = look_up(point_name);
-	if (pt == NULL) {
-		say_error("%p:%s sync point [%s] does not exist\n",
-			(void*)fiber, __func__, point_name);
+	struct syncpt *pt = LOOK_UP(point_name);
+	if (pt == NULL)
 		return -1;
-	}
 
 	return enable_syncpt(pt, enable);
 }
@@ -657,7 +680,7 @@ fds_disable_all()
 	if (inactive())
 		return;
 
-	for (size_t i = 0; i < ds.point_count; ++i)
+	for (size_t i = 0; i < syncpt_enum_MAX; ++i)
 		if (ds.point[i].is_enabled)
 			enable_syncpt(&ds.point[i], false);
 }
@@ -667,13 +690,13 @@ void
 fds_info(struct tbuf *out)
 {
 	if (inactive()) {
-		tbuf_printf(out, "Debug syncronization is DISABLED" CRLF);
+		tbuf_printf(out, "Syncronization framework is DISABLED" CRLF);
 		return;
 	}
 
-	tbuf_printf(out, "Debug syncronization - %lu sync points" CRLF,
-		(unsigned long)ds.point_count);
-	for(size_t i = 0; i < ds.point_count; ++i)
+	tbuf_printf(out, "Syncronization framework: %ld sync points" CRLF,
+			(long)syncpt_enum_MAX);
+	for(size_t i = 0; i < syncpt_enum_MAX; ++i)
 		tbuf_printf(out, "  - %s: %s, %s, waiting: %ld, host: %p locks: %ld" CRLF,
 			ds.point[i].name,
 			ds.point[i].is_enabled ? "enabled" : "disabled",
