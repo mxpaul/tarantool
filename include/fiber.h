@@ -44,6 +44,7 @@
 #include "palloc.h"
 
 #define FIBER_NAME_MAXLEN 32
+#define FIBER_ATEXIT_MAX	16
 
 #define FIBER_READING_INBOX 0x1
 /** Can this fiber be cancelled? */
@@ -93,6 +94,9 @@ struct fiber {
 	u32 flags;
 
 	struct fiber *waiter;
+
+	size_t atexit_count;
+	void (*atexit_stack[FIBER_ATEXIT_MAX])(void);
 };
 
 SLIST_HEAD(, fiber) fibers, zombie_fibers;
@@ -112,6 +116,8 @@ void fiber_free(void);
 struct fiber *fiber_create(const char *name, int fd, void (*f) (void *), void *);
 void fiber_set_name(struct fiber *fiber, const char *name);
 void wait_for_child(pid_t pid);
+
+int fiber_atexit(void (*func)(void));
 
 void
 fiber_io_start(int fd, int events);

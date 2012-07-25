@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2010 Mail.RU
- * Copyright (C) 2010 Yuriy Vostrikov
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -53,12 +52,14 @@ struct syncpt {
 	bool			is_locked;
 	/** The fiber where the syncpt is being run. */
 	struct fiber		*host_fiber;
-	/** Number of fibers holding locks on syncpt. */
-	ssize_t			host_locks;
 	/** List of fibers waiting on the syncpt. */
 	struct fiber_ref	*waiting;
 	/** Number of fibers waiting on the syncpt. */
-	ssize_t			wait_count;
+	ssize_t			waiting_count;
+	/** List of fibers syncpt is holding (being locked) for. */
+	struct fiber_ref	*locking;
+	/** Number of fibers holding locks on syncpt. */
+	ssize_t			lock_count;
 };
 
 
@@ -87,6 +88,9 @@ struct syncpt_dgram {
 	int	index;
 };
 
+
+/** Forward declaration: atexit handler for participating fibers. */
+static void atexit_syncpt();
 
 
 inline static bool inactive() { return ds.is_active == false; }
@@ -127,7 +131,7 @@ syncpt_wait(struct syncpt *pt)
 	/* Head insert. */
 	ref->next = pt->waiting;
 	pt->waiting = ref;
-	pt->wait_count++;
+	pt->waiting_count++;
 
 	say_debug("%s: fiber %p will now block on syncpoint %s",
 		__func__, (void*)fiber, pt->name);
@@ -218,7 +222,7 @@ create_new(const char *point_name)
 	ds.point[i].waiting = NULL;
 
 	ds.point[i].host_fiber = NULL;
-	ds.point[i].host_locks = 0;
+	ds.point[i].lock_count = 0;
 
 	++ds.point_count;
 
@@ -272,32 +276,30 @@ wakeup_blocked(struct syncpt *pt)
 	 * save pointer to the head of the list.
 	 */
 	struct fiber_ref *head = pt->waiting, *ref = NULL;
+	ssize_t waiting_count = pt->waiting_count;
 
 	for(ref = head; ref != NULL; ref = ref->next) {
-		say_debug("%s: waking up fiber %p (broadcast)",
+		say_debug("%s: waking up fiber %p",
 				__func__, (void*)ref->target);
 		fiber_call(ref->target);
-		pt->wait_count--;
+		pt->waiting_count--;
 	}
 
-	/* Find the item preceding the former (saved) head. */
+	/* Find the item preceding the (possibly former) head. */
 	struct fiber_ref *prev = NULL;
 	for(ref = pt->waiting; ref && ref != head; prev = ref, ref = ref->next);
 
-	/* Remove all after the first marked ref. */
-	while(ref) {
-		say_debug("%s: removing fiber %p from syncpoint %s",
-			__func__, (void*)ref->target, pt->name);
-		struct fiber_ref *tmp = ref->next;
-		free(ref); /* TODO */
-		ref = tmp;
-	}
+	assert(ref == head && pt->locking == NULL);
 
-	/* Trim the list. */
+	/* Former waiting fibers become the locking ones. */
+	pt->locking = head;
+	pt->lock_count = waiting_count;
+
 	if (prev)
 		prev->next = NULL;
 	else
 		pt->waiting = NULL;
+
 	return;
 }
 
@@ -399,10 +401,12 @@ fds_wait(const char *point_name)
 	if (inactive())
 		return -1;
 
+	fiber_atexit(&atexit_syncpt);
+
 	struct syncpt *pt = acquire(point_name);
 	if (!pt)
 		return -1;
-		
+
 	int rc = syncpt_wait(pt);
 
 	fiber_testcancel();
@@ -416,6 +420,8 @@ fds_exec(const char *point_name)
 {
 	if (inactive())
 		return 0;
+
+	fiber_atexit(&atexit_syncpt);
 
 	struct syncpt *pt = acquire(point_name);
 	if (pt == NULL)
@@ -444,15 +450,10 @@ fds_exec(const char *point_name)
 	pt->is_locked = true;
 	int rc = 0;
 	do {
-		ssize_t count = pt->wait_count;
-
 		rc = syncpt_wakeup(pt);
 		if (rc) break;
 
-		/* Waiters become locks after the wake-up. */
-		pt->host_locks = count;
-
-		if (pt->host_locks > 0)
+		if (pt->lock_count > 0)
 			rc = syncpt_hold(pt);
 		else
 			say_debug("%p:%s no lockers to hold for at [%s]",
@@ -470,6 +471,55 @@ fds_exec(const char *point_name)
 }
 
 
+/* Find and remove the calling fiber from the locker list.
+ */
+static int
+release_lock(struct syncpt *pt, bool must_find)
+{
+	struct fiber_ref *ref = pt->locking, *prev = NULL;
+	for (; ref && ref->target != fiber; prev = ref, ref = ref->next);
+	if (ref == NULL) {
+		if (must_find)
+			say_error("%p:%s is not holding a lock on [%s]",
+				(void*)fiber, __func__, pt->name);
+
+		return -1;
+	}
+	if (prev)
+		prev->next = ref->next;
+	else
+		pt->locking = ref->next;
+
+	free(ref);
+	return 0;
+}
+
+
+/**
+ * Remove current fiber's lock from the given syncpt.
+ */
+static int
+do_unlock(struct syncpt *pt, bool must_find)
+{
+	if (release_lock(pt, must_find) == -1)
+		return -1;
+
+	say_debug("%p:%s lock released for [%s], %ld locks left",
+		(void*)fiber, __func__, pt->name, (long)pt->lock_count);
+
+	/* If all locks are gone, wake up the holding fiber. */
+	if (--pt->lock_count == 0) {
+		say_debug("%p:%s [%s] has %ld locks - must UNLOCK",
+			(void*)fiber, __func__, pt->name,
+			(long)pt->lock_count);
+
+		return syncpt_unlock(pt);
+	}
+
+	return 0;
+}
+
+
 int
 fds_unlock(const char *point_name)
 {
@@ -483,24 +533,82 @@ fds_unlock(const char *point_name)
 		return -1;
 	}
 
-	if (pt->host_locks <= 0) {
+	if (pt->lock_count <= 0) {
 		say_error("%p:%s no locks held on [%s], cannot unlock",
 			(void*)fiber, __func__, point_name);
 
-		pt->host_locks = 0;
+		pt->lock_count = 0;
 		return -1;
 	}
 
-	
-	if (--pt->host_locks == 0) {
-		say_debug("%p:%s [%s] has %ld locks - must UNLOCK",
-			(void*)fiber, __func__, pt->name,
-			(long)pt->host_locks);
+	return do_unlock(pt, true);
+}
 
-		return syncpt_unlock(pt);
-	}
 
+/**
+ * Remove current fiber from the waiting list.
+ */
+static int
+remove_waiting_fiber(struct syncpt *pt)
+{
+	struct fiber_ref *ref = pt->waiting, *prev = NULL;
+	for(; ref && ref->target != fiber; prev = ref, ref = ref->next);
+	if (!ref || ref->target != fiber)
+		return -1;
+
+	if (prev)
+		prev->next = ref->next;
+	else
+		pt->waiting = ref->next;
+
+	pt->waiting_count--;
+
+	free(ref);
+
+	say_debug("%p:%s waiting fiber removed from [%s]",
+		(void*)fiber, __func__, pt->name);
 	return 0;
+}
+
+
+inline static void
+remove_locks(struct syncpt *pt)
+{
+	struct fiber_ref *ref = pt->locking;
+	while (ref) {
+		struct fiber_ref *tmp = ref->next;
+		free(ref);
+		pt->lock_count--;
+		ref = tmp;
+	}
+	assert(pt->lock_count == 0);
+	say_debug("%p:%s all locks removed from [%s]",
+		(void*)fiber, __func__, pt->name);
+}
+
+
+static void
+atexit_syncpt()
+{
+	if (inactive())
+		return;
+
+	struct syncpt *pt = &ds.point[0];
+	for (size_t i = 0; i < MAX_SYNCPT_COUNT; ++i, ++pt) {
+		if (!pt->is_enabled)
+			continue;
+		/* Is this the syncpoint's host? */
+		if (pt->host_fiber == fiber) {
+			remove_locks(pt);
+			return;
+		}
+		/* Is this fiber waiting on the syncpt? */
+		if (pt->waiting && remove_waiting_fiber(pt) == 0)
+			return;
+		/* Is this fiber locked on the syncpt? */
+		if (pt->locking && do_unlock(pt, false) == 0)
+			return;
+	}
 }
 
 
@@ -516,7 +624,7 @@ enable_syncpt(struct syncpt *pt, bool enable)
 			rc = syncpt_wakeup(pt);
 
 		if (rc == 0 && pt->host_fiber != NULL) {
-			pt->host_locks = 0;
+			pt->lock_count = 0;
 			rc = syncpt_unlock(pt);
 		}
 	}
@@ -570,8 +678,8 @@ fds_info(struct tbuf *out)
 			ds.point[i].name,
 			ds.point[i].is_enabled ? "enabled" : "disabled",
 			ds.point[i].is_locked ? "locked" : "idle",
-			(long)ds.point[i].wait_count,
+			(long)ds.point[i].waiting_count,
 			(void*)ds.point[i].host_fiber,
-			(long)ds.point[i].host_locks);
+			(long)ds.point[i].lock_count);
 }
 

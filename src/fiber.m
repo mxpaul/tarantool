@@ -454,11 +454,39 @@ fiber_loop(void *data __attribute__((unused)))
 			say_error("fiber `%s': exception `%s'", fiber->name, object_getClassName(e));
 			panic("fiber `%s': exiting", fiber->name);
 		}
+
+		for(size_t i = fiber->atexit_count; i > 0; --i)
+			(*fiber->atexit_stack[i])();
+		fiber->atexit_count = 0;
+
 		fiber_close();
 		fiber_zombificate();
 		fiber_yield();	/* give control back to scheduler */
 	}
 }
+
+
+int
+fiber_atexit(void (*func)(void))
+{
+	if (!func)
+		return -1;
+
+	for (size_t i = 0; i < fiber->atexit_count; ++i)
+		if (fiber->atexit_stack[i] == func)
+			return 0;
+
+	if (fiber->atexit_count >= FIBER_ATEXIT_MAX) {
+		say_error("Too many atexit handlers for fiber %p",
+			(void*)fiber);
+		return -1;
+	}
+
+	fiber->atexit_stack[fiber->atexit_count++] = func;
+
+	return 0;
+}
+
 
 /** Set fiber name.
  *
@@ -511,6 +539,7 @@ fiber_create(const char *name, int fd, void (*f) (void *), void *f_data)
 	fiber->fid = last_used_fid;
 	fiber->flags = 0;
 	fiber->waiter = NULL;
+	fiber->atexit_count = 0;
 	fiber_set_name(fiber, name);
 	palloc_set_name(fiber->gc_pool, fiber->name);
 	register_fid(fiber);
