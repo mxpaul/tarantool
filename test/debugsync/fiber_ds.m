@@ -111,6 +111,29 @@ static void atexit_syncpt();
 inline static bool inactive() { return ds.is_active == false; }
 
 
+static void
+syncpt_yield(struct syncpt *pt)
+{
+	say_debug("%s fiber %p will now block on syncpoint %s",
+		pt->host_fiber == fiber ? "host" : "client",
+		(void*)fiber, pt->name);
+
+	/* Wake up if/when the console terminates. */
+	fiber_io_start(fiber->fd, EV_READ);
+
+	fiber_yield();
+
+	fiber_io_stop(fiber->fd, EV_READ);
+
+	fiber_testcancel();
+
+	say_debug("%s fiber %p woke up on syncpoint %s [%s]",
+		pt->host_fiber == fiber ? "host" : "client",
+		(void*)fiber, pt->name,
+		pt->is_enabled ? "enabled" : "disabled");
+}
+
+
 /**
  * Wait for sync point to execute.
  *
@@ -126,20 +149,12 @@ syncpt_wait(struct syncpt *pt)
 
 	ref->target = fiber;
 
-	/* Head insert. */
 	ref->next = pt->waiting;
 	pt->waiting = ref;
 	pt->waiting_count++;
 
-	say_debug("%s: fiber %p will now block on syncpoint %s",
-		__func__, (void*)fiber, pt->name);
+	syncpt_yield(pt);
 
-	fiber_yield();
-	fiber_testcancel();
-
-	say_debug("%s: fiber %p woke up on syncpoint %s [%s]",
-		__func__, (void*)fiber, pt->name,
-		pt->is_enabled ? "OK" : "disabled");
 	return pt->is_enabled ? 0 : -1;
 }
 
@@ -151,20 +166,11 @@ syncpt_wait(struct syncpt *pt)
  * @return 0 if unlocked by all waiters in a valid state.
  */
 static int
-syncpt_hold(struct syncpt *pt)
+hold_for_clients(struct syncpt *pt)
 {
 	pt->host_fiber = fiber;
 
-	say_debug("%s: host fiber %p will now hold at syncpoint %s",
-		__func__, (void*)fiber, pt->name);
-
-	fiber_yield();
-	fiber_testcancel();
-
-	say_debug("%s: fiber %p woke up on syncpoint %s (%s,)",
-		__func__, (void*)fiber, pt->name,
-		pt->is_enabled ? "enabled" : "disabled",
-		pt->is_locked ? "locked" : "idle");
+	syncpt_yield(pt);
 
 	pt->host_fiber = NULL;
 
@@ -327,7 +333,6 @@ syncpt_cb(ev_watcher *watcher __attribute__((unused)), int event __attribute__((
 				break;
 			case 'U':
 				fiber_call(pt->host_fiber);
-				pt->host_fiber = NULL;
 				break;
 			default:
 				say_error("Illegal syncpoint operation code: %c",
@@ -474,8 +479,8 @@ fds_exec(int point_id)
 		rc = syncpt_wakeup(pt);
 		if (rc) break;
 
-		if (pt->lock_count > 0)
-			rc = syncpt_hold(pt);
+		if (pt->waiting_count > 0) /* Waiters become lockers. */
+			rc = hold_for_clients(pt);
 		else
 			say_debug("%p:%s no lockers to hold for at [%s]",
 				(void*)fiber, __func__, pt->name);
@@ -527,7 +532,7 @@ do_unlock(struct syncpt *pt, bool must_find)
 		return -1;
 
 	say_debug("%p:%s lock released for [%s], %ld locks left",
-		(void*)fiber, __func__, pt->name, (long)pt->lock_count);
+		(void*)fiber, __func__, pt->name, (long)pt->lock_count - 1);
 
 	/* If all locks are gone, wake up the holding fiber. */
 	if (--pt->lock_count == 0) {

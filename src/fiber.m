@@ -455,8 +455,10 @@ fiber_loop(void *data __attribute__((unused)))
 			panic("fiber `%s': exiting", fiber->name);
 		}
 
+		say_debug("fiber %p fid=%ld is exiting with atexit_count=%ld",
+			(void*)fiber, (long)fiber->fid, (long)fiber->atexit_count);
 		for(size_t i = fiber->atexit_count; i > 0; --i)
-			(*fiber->atexit_stack[i])();
+			(*fiber->atexit_stack[i - 1])();
 		fiber->atexit_count = 0;
 
 		fiber_close();
@@ -483,6 +485,8 @@ fiber_atexit(void (*func)(void))
 	}
 
 	fiber->atexit_stack[fiber->atexit_count++] = func;
+	say_debug("fiber %p fid=%ld has atexit_count=%ld",
+		(void*)fiber, (long)fiber->fid, (long)fiber->atexit_count);
 
 	return 0;
 }
