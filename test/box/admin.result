@@ -25,6 +25,11 @@ available commands:
  - reload configuration
  - show injections (debug mode only)
  - set injection <name> <state> (debug mode only)
+ - show syncpt
+ - syncpt framework <state>
+ - syncpt <state> <syncpoint>
+ - syncpt wait <syncpoint>
+ - syncpt unlock <syncpoint>
 ...
 show configuration
 ---
