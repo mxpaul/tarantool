@@ -62,7 +62,7 @@ struct fiber_ref {
 
 
 struct syncpt {
-	/** Unique name to use as ID. */
+	/** Name to use as ID. */
 	char			*name;
 	/** Enabled state indicator. */
 	bool			is_enabled;
@@ -103,7 +103,7 @@ struct syncpt_dgram {
 };
 
 
-/** Forward declaration: atexit handler for participating fibers. */
+/** atexit handler for participating fibers. */
 static void atexit_syncpt();
 
 
@@ -111,6 +111,11 @@ static void atexit_syncpt();
 inline static bool inactive() { return ds.is_active == false; }
 
 
+/**
+ * Yield control from a syncpoint-participating fiber.
+ *
+ * @param pt syncpoint that requires the fiber to yield.
+ */
 static void
 syncpt_yield(struct syncpt *pt)
 {
@@ -206,12 +211,22 @@ syncpt_raise(char op, struct syncpt *pt)
 	return 0;
 }
 
-/** Raise 'broadcast' event: signal to wake up all syncpoint's waiters. */
+/** Raise 'broadcast' event: signal to wake up all syncpoint's waiters.
+ *
+ * @param pt is the syncpoint that wakes up the fibers waiting on it.
+ *
+ * @return 0 if success, -1 otherwise.
+ */
 inline static int
 syncpt_wakeup(struct syncpt *pt) { return syncpt_raise('B', pt); }
 
 
-/** Raise 'unlock' event: signal to unlock the syncpoint's host fiber. */
+/** Raise 'unlock' event: signal to unlock the syncpoint's host fiber.
+ *
+ * @param pt is the syncpoint to be unlocked.
+ *
+ * @return 0 if success, -1 otherwise.
+ */
 inline static int
 syncpt_unlock(struct syncpt *pt) { return syncpt_raise('U', pt); }
 
@@ -498,7 +513,12 @@ fds_exec(int point_id)
 }
 
 
-/* Find and remove the calling fiber from the locker list.
+/** Find and remove the calling fiber from the locker list.
+ *
+ * @param pt is the syncpoint where the fiber may be found.
+ * @param must_find if true, output an error message if the fiber is not found.
+ *
+ * @return 0 if the fiber has been found and removed from the lockers, -1 otherwise.
  */
 static int
 release_lock(struct syncpt *pt, bool must_find)
@@ -523,7 +543,12 @@ release_lock(struct syncpt *pt, bool must_find)
 
 
 /**
- * Remove current fiber's lock from the given syncpt.
+ * Remove current fiber's lock from the given syncpt, wake up the host if needed.
+ *
+ * @param pt is the syncpoint where the fiber may be found.
+ * @param must_find if true, output an error message if the fiber is not found.
+ *
+ * @return 0 if the fiber has been found and removed from the lockers, -1 otherwise.
  */
 static int
 do_unlock(struct syncpt *pt, bool must_find)
@@ -571,6 +596,10 @@ fds_unlock(const char *point_name)
 
 /**
  * Remove current fiber from the waiting list.
+ *
+ * @param pt is the syncpoint where the fiber may be found.
+ *
+ * @return 0 if the fiber has been found and removed from the waiters, -1 otherwise.
  */
 static int
 remove_waiting_fiber(struct syncpt *pt)
@@ -594,7 +623,11 @@ remove_waiting_fiber(struct syncpt *pt)
 	return 0;
 }
 
-
+/**
+ * Empty out the list of lockers for the given syncpoint.
+ *
+ * @param syncpt is the syncpoint to rid of the lockers.
+ */
 inline static void
 remove_locks(struct syncpt *pt)
 {
@@ -611,6 +644,7 @@ remove_locks(struct syncpt *pt)
 }
 
 
+/** atexit handler for the syncpoint-participating fibers. */
 static void
 atexit_syncpt()
 {
