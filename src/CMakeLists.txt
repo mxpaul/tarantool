@@ -58,6 +58,12 @@ add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/src/admin.m
     COMMAND ${RAGEL} -G2 src/admin.rl -o src/admin.m
     DEPENDS ${CMAKE_SOURCE_DIR}/src/admin.rl)
 
+
+add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/src/smaps_analyze.m
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMAND ${RAGEL} -G2 src/smaps_analyze.rl -o src/smaps_analyze.m
+    DEPENDS ${CMAKE_SOURCE_DIR}/src/admin.rl)
+
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/src/memcached-grammar.m
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     COMMAND ${RAGEL} -G2 src/memcached-grammar.rl
@@ -65,6 +71,9 @@ add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/src/memcached-grammar.m
     DEPENDS ${CMAKE_SOURCE_DIR}/src/memcached-grammar.rl)
 
 add_custom_target(generate_admin_m DEPENDS ${CMAKE_SOURCE_DIR}/src/admin.m)
+
+add_custom_target(generate_smaps_analyze_m DEPENDS
+	${CMAKE_SOURCE_DIR}/src/smaps_analyze.m)
 add_custom_target(generate_memcached_grammar_m DEPENDS
     ${CMAKE_SOURCE_DIR}/src/memcached-grammar.m)
 
@@ -72,6 +81,7 @@ add_custom_target(generate_memcached_grammar_m DEPENDS
 # after a fresh checkout/branch switch.
 execute_process(COMMAND ${CMAKE_COMMAND} -E touch_nocreate
     ${CMAKE_SOURCE_DIR}/src/admin.m
+    ${CMAKE_SOURCE_DIR}/src/smaps_analyze.m
     ${CMAKE_SOURCE_DIR}/src/memcached-grammar.m)
 
 set_source_files_properties(${CMAKE_SOURCE_DIR}/src/memcached-grammar.m
@@ -115,6 +125,7 @@ set (common_sources
      log_io.m
      recovery.m
      admin.m
+     smaps_analyze.m
      cpu_feature.m
      replica.m
      iproto.m
@@ -190,7 +201,7 @@ function(tarantool_module mod)
     add_library(lt${mod} STATIC ${recompiled_sources})
     set_target_properties(lt${mod} PROPERTIES COMPILE_FLAGS
         "${core_cflags} ${GCOV_C_FLAGS} -DTARANTOOL_CONFIG='<cfg/tarantool_${mod}_cfg.h>'")
-    add_dependencies(lt${mod} generate_headers generate_admin_m generate_memcached_grammar_m build_bundled_libs)
+    add_dependencies(lt${mod} generate_headers generate_admin_m generate_memcached_grammar_m generate_smaps_analyze_m build_bundled_libs)
 
     target_link_libraries(tarantool_${mod} lt${mod} ${GCOV_LDFLAGS} ${common_libraries})
     set_target_properties(tarantool_${mod} PROPERTIES COMPILE_FLAGS

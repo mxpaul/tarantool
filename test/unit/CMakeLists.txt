@@ -1,3 +1,4 @@
+add_executable(smaps_analyze test.c smaps_analyze.c ${CMAKE_SOURCE_DIR}/src/smaps_analyze.m)
 add_executable(rlist rlist.c test.c)
 add_executable(queue queue.c)
 add_executable(mhash mhash.c)
