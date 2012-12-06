@@ -30,7 +30,6 @@
  */
 
 #include "smaps_analyze.h"
-#include "smaps_analyze.h"
 #include <stdlib.h>
 #include <stdint.h>
 #include <unistd.h>
@@ -41,7 +40,7 @@
 
 
 
-#line 45 "src/smaps_analyze.m"
+#line 44 "src/smaps_analyze.m"
 static const int smaps_start = 0;
 static const int smaps_first_final = 40;
 static const int smaps_error = -1;
@@ -49,7 +48,7 @@ static const int smaps_error = -1;
 static const int smaps_en_main = 0;
 
 
-#line 45 "src/smaps_analyze.rl"
+#line 44 "src/smaps_analyze.rl"
 
 
 
@@ -107,12 +106,12 @@ smaps_analyze(struct rlist *head)
 		const char *ato = NULL;
 
 		
-#line 111 "src/smaps_analyze.m"
+#line 110 "src/smaps_analyze.m"
 	{
 	cs = smaps_start;
 	}
 
-#line 116 "src/smaps_analyze.m"
+#line 115 "src/smaps_analyze.m"
 	{
 	if ( p == pe )
 		goto _test_eof;
@@ -131,7 +130,7 @@ case 0:
 		goto tr2;
 	goto st1;
 tr15:
-#line 128 "src/smaps_analyze.rl"
+#line 127 "src/smaps_analyze.rl"
 	{
 				struct smap_region *region =
 					malloc(sizeof(struct smap_region));
@@ -156,7 +155,7 @@ tr15:
 			}
 	goto st1;
 tr45:
-#line 102 "src/smaps_analyze.rl"
+#line 101 "src/smaps_analyze.rl"
 	{
 				afrom = NULL;
 				ato = NULL;
@@ -167,12 +166,12 @@ st1:
 	if ( ++p == pe )
 		goto _test_eof1;
 case 1:
-#line 171 "src/smaps_analyze.m"
+#line 170 "src/smaps_analyze.m"
 	if ( (*p) == 10 )
 		goto st40;
 	goto st1;
 tr16:
-#line 128 "src/smaps_analyze.rl"
+#line 127 "src/smaps_analyze.rl"
 	{
 				struct smap_region *region =
 					malloc(sizeof(struct smap_region));
@@ -197,7 +196,7 @@ tr16:
 			}
 	goto st40;
 tr46:
-#line 102 "src/smaps_analyze.rl"
+#line 101 "src/smaps_analyze.rl"
 	{
 				afrom = NULL;
 				ato = NULL;
@@ -208,7 +207,7 @@ st40:
 	if ( ++p == pe )
 		goto _test_eof40;
 case 40:
-#line 212 "src/smaps_analyze.m"
+#line 211 "src/smaps_analyze.m"
 	if ( (*p) == 10 )
 		goto tr46;
 	if ( (*p) < 65 ) {
@@ -221,7 +220,7 @@ case 40:
 		goto tr47;
 	goto tr45;
 tr2:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -236,13 +235,13 @@ tr2:
 			}
 	goto st2;
 tr47:
-#line 102 "src/smaps_analyze.rl"
+#line 101 "src/smaps_analyze.rl"
 	{
 				afrom = NULL;
 				ato = NULL;
 				address = 0;
 			}
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -260,7 +259,7 @@ st2:
 	if ( ++p == pe )
 		goto _test_eof2;
 case 2:
-#line 264 "src/smaps_analyze.m"
+#line 263 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto st40;
 		case 45: goto tr3;
@@ -275,7 +274,7 @@ case 2:
 		goto tr4;
 	goto st1;
 tr3:
-#line 120 "src/smaps_analyze.rl"
+#line 119 "src/smaps_analyze.rl"
 	{
 				afrom = (typeof(afrom))address;
 				address = 0;
@@ -285,7 +284,7 @@ st3:
 	if ( ++p == pe )
 		goto _test_eof3;
 case 3:
-#line 289 "src/smaps_analyze.m"
+#line 288 "src/smaps_analyze.m"
 	if ( (*p) == 10 )
 		goto st40;
 	if ( (*p) < 65 ) {
@@ -298,7 +297,7 @@ case 3:
 		goto tr5;
 	goto st1;
 tr5:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -316,7 +315,7 @@ st4:
 	if ( ++p == pe )
 		goto _test_eof4;
 case 4:
-#line 320 "src/smaps_analyze.m"
+#line 319 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto tr7;
 		case 32: goto tr6;
@@ -334,14 +333,14 @@ case 4:
 		goto tr8;
 	goto st1;
 tr6:
-#line 124 "src/smaps_analyze.rl"
+#line 123 "src/smaps_analyze.rl"
 	{
 				ato = (typeof(ato))address;
 
 			}
 	goto st5;
 tr48:
-#line 102 "src/smaps_analyze.rl"
+#line 101 "src/smaps_analyze.rl"
 	{
 				afrom = NULL;
 				ato = NULL;
@@ -352,7 +351,7 @@ st5:
 	if ( ++p == pe )
 		goto _test_eof5;
 case 5:
-#line 356 "src/smaps_analyze.m"
+#line 355 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto st41;
 		case 32: goto st5;
@@ -363,14 +362,14 @@ case 5:
 		goto st5;
 	goto st1;
 tr7:
-#line 124 "src/smaps_analyze.rl"
+#line 123 "src/smaps_analyze.rl"
 	{
 				ato = (typeof(ato))address;
 
 			}
 	goto st41;
 tr49:
-#line 102 "src/smaps_analyze.rl"
+#line 101 "src/smaps_analyze.rl"
 	{
 				afrom = NULL;
 				ato = NULL;
@@ -381,7 +380,7 @@ st41:
 	if ( ++p == pe )
 		goto _test_eof41;
 case 41:
-#line 385 "src/smaps_analyze.m"
+#line 384 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto tr49;
 		case 32: goto tr48;
@@ -401,7 +400,7 @@ case 41:
 		goto tr47;
 	goto tr45;
 tr50:
-#line 102 "src/smaps_analyze.rl"
+#line 101 "src/smaps_analyze.rl"
 	{
 				afrom = NULL;
 				ato = NULL;
@@ -412,7 +411,7 @@ st6:
 	if ( ++p == pe )
 		goto _test_eof6;
 case 6:
-#line 416 "src/smaps_analyze.m"
+#line 415 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto st40;
 		case 45: goto st7;
@@ -451,7 +450,7 @@ case 9:
 		goto tr15;
 	goto st1;
 tr8:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -469,7 +468,7 @@ st10:
 	if ( ++p == pe )
 		goto _test_eof10;
 case 10:
-#line 473 "src/smaps_analyze.m"
+#line 472 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto tr7;
 		case 32: goto tr6;
@@ -487,7 +486,7 @@ case 10:
 		goto tr17;
 	goto st1;
 tr17:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -505,7 +504,7 @@ st11:
 	if ( ++p == pe )
 		goto _test_eof11;
 case 11:
-#line 509 "src/smaps_analyze.m"
+#line 508 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto tr7;
 		case 32: goto tr6;
@@ -523,7 +522,7 @@ case 11:
 		goto tr18;
 	goto st1;
 tr18:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -541,7 +540,7 @@ st12:
 	if ( ++p == pe )
 		goto _test_eof12;
 case 12:
-#line 545 "src/smaps_analyze.m"
+#line 544 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto tr7;
 		case 32: goto tr6;
@@ -559,7 +558,7 @@ case 12:
 		goto tr19;
 	goto st1;
 tr19:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -577,7 +576,7 @@ st13:
 	if ( ++p == pe )
 		goto _test_eof13;
 case 13:
-#line 581 "src/smaps_analyze.m"
+#line 580 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto tr7;
 		case 32: goto tr6;
@@ -595,7 +594,7 @@ case 13:
 		goto tr20;
 	goto st1;
 tr20:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -613,7 +612,7 @@ st14:
 	if ( ++p == pe )
 		goto _test_eof14;
 case 14:
-#line 617 "src/smaps_analyze.m"
+#line 616 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto tr7;
 		case 32: goto tr6;
@@ -631,7 +630,7 @@ case 14:
 		goto tr21;
 	goto st1;
 tr21:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -649,7 +648,7 @@ st15:
 	if ( ++p == pe )
 		goto _test_eof15;
 case 15:
-#line 653 "src/smaps_analyze.m"
+#line 652 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto tr7;
 		case 32: goto tr6;
@@ -667,7 +666,7 @@ case 15:
 		goto tr22;
 	goto st1;
 tr22:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -685,7 +684,7 @@ st16:
 	if ( ++p == pe )
 		goto _test_eof16;
 case 16:
-#line 689 "src/smaps_analyze.m"
+#line 688 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto tr7;
 		case 32: goto tr6;
@@ -703,7 +702,7 @@ case 16:
 		goto tr23;
 	goto st1;
 tr23:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -721,7 +720,7 @@ st17:
 	if ( ++p == pe )
 		goto _test_eof17;
 case 17:
-#line 725 "src/smaps_analyze.m"
+#line 724 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto tr7;
 		case 32: goto tr6;
@@ -739,7 +738,7 @@ case 17:
 		goto tr24;
 	goto st1;
 tr24:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -757,7 +756,7 @@ st18:
 	if ( ++p == pe )
 		goto _test_eof18;
 case 18:
-#line 761 "src/smaps_analyze.m"
+#line 760 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto tr7;
 		case 32: goto tr6;
@@ -775,7 +774,7 @@ case 18:
 		goto tr25;
 	goto st1;
 tr25:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -793,7 +792,7 @@ st19:
 	if ( ++p == pe )
 		goto _test_eof19;
 case 19:
-#line 797 "src/smaps_analyze.m"
+#line 796 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto tr7;
 		case 32: goto tr6;
@@ -811,7 +810,7 @@ case 19:
 		goto tr26;
 	goto st1;
 tr26:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -829,7 +828,7 @@ st20:
 	if ( ++p == pe )
 		goto _test_eof20;
 case 20:
-#line 833 "src/smaps_analyze.m"
+#line 832 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto tr7;
 		case 32: goto tr6;
@@ -847,7 +846,7 @@ case 20:
 		goto tr27;
 	goto st1;
 tr27:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -865,7 +864,7 @@ st21:
 	if ( ++p == pe )
 		goto _test_eof21;
 case 21:
-#line 869 "src/smaps_analyze.m"
+#line 868 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto tr7;
 		case 32: goto tr6;
@@ -883,7 +882,7 @@ case 21:
 		goto tr28;
 	goto st1;
 tr28:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -901,7 +900,7 @@ st22:
 	if ( ++p == pe )
 		goto _test_eof22;
 case 22:
-#line 905 "src/smaps_analyze.m"
+#line 904 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto tr7;
 		case 32: goto tr6;
@@ -919,7 +918,7 @@ case 22:
 		goto tr29;
 	goto st1;
 tr29:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -937,7 +936,7 @@ st23:
 	if ( ++p == pe )
 		goto _test_eof23;
 case 23:
-#line 941 "src/smaps_analyze.m"
+#line 940 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto tr7;
 		case 32: goto tr6;
@@ -955,7 +954,7 @@ case 23:
 		goto tr30;
 	goto st1;
 tr30:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -973,7 +972,7 @@ st24:
 	if ( ++p == pe )
 		goto _test_eof24;
 case 24:
-#line 977 "src/smaps_analyze.m"
+#line 976 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto tr7;
 		case 32: goto tr6;
@@ -982,7 +981,7 @@ case 24:
 		goto tr6;
 	goto st1;
 tr4:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -1000,7 +999,7 @@ st25:
 	if ( ++p == pe )
 		goto _test_eof25;
 case 25:
-#line 1004 "src/smaps_analyze.m"
+#line 1003 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto st40;
 		case 45: goto tr3;
@@ -1015,7 +1014,7 @@ case 25:
 		goto tr31;
 	goto st1;
 tr31:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -1033,7 +1032,7 @@ st26:
 	if ( ++p == pe )
 		goto _test_eof26;
 case 26:
-#line 1037 "src/smaps_analyze.m"
+#line 1036 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto st40;
 		case 45: goto tr3;
@@ -1048,7 +1047,7 @@ case 26:
 		goto tr32;
 	goto st1;
 tr32:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -1066,7 +1065,7 @@ st27:
 	if ( ++p == pe )
 		goto _test_eof27;
 case 27:
-#line 1070 "src/smaps_analyze.m"
+#line 1069 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto st40;
 		case 45: goto tr3;
@@ -1081,7 +1080,7 @@ case 27:
 		goto tr33;
 	goto st1;
 tr33:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -1099,7 +1098,7 @@ st28:
 	if ( ++p == pe )
 		goto _test_eof28;
 case 28:
-#line 1103 "src/smaps_analyze.m"
+#line 1102 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto st40;
 		case 45: goto tr3;
@@ -1114,7 +1113,7 @@ case 28:
 		goto tr34;
 	goto st1;
 tr34:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -1132,7 +1131,7 @@ st29:
 	if ( ++p == pe )
 		goto _test_eof29;
 case 29:
-#line 1136 "src/smaps_analyze.m"
+#line 1135 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto st40;
 		case 45: goto tr3;
@@ -1147,7 +1146,7 @@ case 29:
 		goto tr35;
 	goto st1;
 tr35:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -1165,7 +1164,7 @@ st30:
 	if ( ++p == pe )
 		goto _test_eof30;
 case 30:
-#line 1169 "src/smaps_analyze.m"
+#line 1168 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto st40;
 		case 45: goto tr3;
@@ -1180,7 +1179,7 @@ case 30:
 		goto tr36;
 	goto st1;
 tr36:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -1198,7 +1197,7 @@ st31:
 	if ( ++p == pe )
 		goto _test_eof31;
 case 31:
-#line 1202 "src/smaps_analyze.m"
+#line 1201 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto st40;
 		case 45: goto tr3;
@@ -1213,7 +1212,7 @@ case 31:
 		goto tr37;
 	goto st1;
 tr37:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -1231,7 +1230,7 @@ st32:
 	if ( ++p == pe )
 		goto _test_eof32;
 case 32:
-#line 1235 "src/smaps_analyze.m"
+#line 1234 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto st40;
 		case 45: goto tr3;
@@ -1246,7 +1245,7 @@ case 32:
 		goto tr38;
 	goto st1;
 tr38:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -1264,7 +1263,7 @@ st33:
 	if ( ++p == pe )
 		goto _test_eof33;
 case 33:
-#line 1268 "src/smaps_analyze.m"
+#line 1267 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto st40;
 		case 45: goto tr3;
@@ -1279,7 +1278,7 @@ case 33:
 		goto tr39;
 	goto st1;
 tr39:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -1297,7 +1296,7 @@ st34:
 	if ( ++p == pe )
 		goto _test_eof34;
 case 34:
-#line 1301 "src/smaps_analyze.m"
+#line 1300 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto st40;
 		case 45: goto tr3;
@@ -1312,7 +1311,7 @@ case 34:
 		goto tr40;
 	goto st1;
 tr40:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -1330,7 +1329,7 @@ st35:
 	if ( ++p == pe )
 		goto _test_eof35;
 case 35:
-#line 1334 "src/smaps_analyze.m"
+#line 1333 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto st40;
 		case 45: goto tr3;
@@ -1345,7 +1344,7 @@ case 35:
 		goto tr41;
 	goto st1;
 tr41:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -1363,7 +1362,7 @@ st36:
 	if ( ++p == pe )
 		goto _test_eof36;
 case 36:
-#line 1367 "src/smaps_analyze.m"
+#line 1366 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto st40;
 		case 45: goto tr3;
@@ -1378,7 +1377,7 @@ case 36:
 		goto tr42;
 	goto st1;
 tr42:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -1396,7 +1395,7 @@ st37:
 	if ( ++p == pe )
 		goto _test_eof37;
 case 37:
-#line 1400 "src/smaps_analyze.m"
+#line 1399 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto st40;
 		case 45: goto tr3;
@@ -1411,7 +1410,7 @@ case 37:
 		goto tr43;
 	goto st1;
 tr43:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -1429,7 +1428,7 @@ st38:
 	if ( ++p == pe )
 		goto _test_eof38;
 case 38:
-#line 1433 "src/smaps_analyze.m"
+#line 1432 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto st40;
 		case 45: goto tr3;
@@ -1444,7 +1443,7 @@ case 38:
 		goto tr44;
 	goto st1;
 tr44:
-#line 107 "src/smaps_analyze.rl"
+#line 106 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -1462,7 +1461,7 @@ st39:
 	if ( ++p == pe )
 		goto _test_eof39;
 case 39:
-#line 1466 "src/smaps_analyze.m"
+#line 1465 "src/smaps_analyze.m"
 	switch( (*p) ) {
 		case 10: goto st40;
 		case 45: goto tr3;
@@ -1517,21 +1516,21 @@ case 39:
 	switch ( cs ) {
 	case 40: 
 	case 41: 
-#line 102 "src/smaps_analyze.rl"
+#line 101 "src/smaps_analyze.rl"
 	{
 				afrom = NULL;
 				ato = NULL;
 				address = 0;
 			}
 	break;
-#line 1528 "src/smaps_analyze.m"
+#line 1527 "src/smaps_analyze.m"
 	}
 	}
 
 	_out: {}
 	}
 
-#line 185 "src/smaps_analyze.rl"
+#line 184 "src/smaps_analyze.rl"
 
 	}
 

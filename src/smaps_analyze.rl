@@ -28,7 +28,6 @@
  */
 
 #include "smaps_analyze.h"
-#include "smaps_analyze.h"
 #include <stdlib.h>
 #include <stdint.h>
 #include <unistd.h>
