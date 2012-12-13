@@ -30,6 +30,7 @@
 #define INCLUDES_TARANTOOL_SMAPS_ANALYZE_H
 
 #include <rlist.h>
+#include <stdlib.h>
 
 #define SMAP_REGION_W	(1 << 0)
 #define SMAP_REGION_R	(1 << 1)
@@ -41,9 +42,13 @@ struct smap_region {
 	const char *to;
 	int flags;
 	struct rlist list;
+
+	size_t private_dirty;
+	size_t shared_dirty;
 };
 
 
+size_t smaps_compare(struct rlist *smap_from, struct rlist *smap_to);
 void smaps_analyze(struct rlist *head);
 void smaps_free(struct rlist *head);
 

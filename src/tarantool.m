@@ -64,6 +64,7 @@
 #include "tarantool_pthread.h"
 #include "lua/init.h"
 #include "memcached.h"
+#include "smaps_analyze.h"
 
 
 static pid_t master_pid;
@@ -346,6 +347,10 @@ snapshot(void *ev, int events __attribute__((unused)))
 		return (WIFSIGNALED(status) ? EINTR : WEXITSTATUS(status));
 	}
 
+	struct rlist smaps_before_snapshot, smaps_after_snapshot;
+
+	smaps_analyze(&smaps_before_snapshot);
+
 	fiber_set_name(fiber, "dumper");
 	set_proc_title("dumper (%" PRIu32 ")", getppid());
 
@@ -355,6 +360,12 @@ snapshot(void *ev, int events __attribute__((unused)))
 	 */
 	close_all_xcpt(1, sayfd);
 	snapshot_save(recovery_state, mod_snapshot);
+
+	smaps_analyze(&smaps_after_snapshot);
+	say_info("snapshot saved successfully, %zu bytes of RAM were used",
+		smaps_compare(&smaps_before_snapshot, &smaps_after_snapshot));
+	smaps_free(&smaps_before_snapshot);
+	smaps_free(&smaps_after_snapshot);
 
 	exit(EXIT_SUCCESS);
 	return 0;

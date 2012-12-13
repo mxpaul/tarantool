@@ -44,11 +44,13 @@
 	write data;
 }%%
 
-
+/**
+ * print one map region
+ */
 int
 smaps_print_region(struct smap_region *region)
 {
-	return
+	int res =
 		printf("%p-%p (%c%c%c%c)\n",
 			region->from,
 			region->to,
@@ -57,8 +59,38 @@ smaps_print_region(struct smap_region *region)
 			(region->flags & SMAP_REGION_X) ? 'x' : '-',
 			(region->flags & SMAP_REGION_P) ? 'p' : '-'
 		);
+
+	if (region->shared_dirty > 0) {
+		res += printf("Shared_Dirty: %zu b\n", region->shared_dirty);
+	}
+	if (region->private_dirty > 0) {
+		res += printf("Private_Dirty: %zu b\n", region->private_dirty);
+	}
+
+	return res;
 }
 
+
+/**
+ * print all map regions
+ */
+int
+smaps_print(struct rlist *head)
+{
+	int res = 0;
+	struct smap_region *region;
+	rlist_foreach_entry(region, head, list) {
+		res += smaps_print_region(region);
+	}
+	return res;
+	(void)head;
+	return 1;
+}
+
+
+/**
+ * read information from /proc/self/smaps (if it exists)
+ */
 void
 smaps_analyze(struct rlist *head)
 {
@@ -95,6 +127,7 @@ smaps_analyze(struct rlist *head)
 		char *eof = NULL;
 		int cs;
 		uint64_t address = 0;
+		size_t pval = 0;
 		const char *afrom = NULL;
 		const char *ato = NULL;
 
@@ -103,6 +136,7 @@ smaps_analyze(struct rlist *head)
 				afrom = NULL;
 				ato = NULL;
 				address = 0;
+				pval = 0;
 			}
 			action address_symbol {
 				if (fc >= 'a' && fc <= 'f') {
@@ -115,6 +149,29 @@ smaps_analyze(struct rlist *head)
 					address <<= 4;
 					address |= ( fc - '0') & 0x0F;
 				}
+			}
+
+			action pval_update {
+				pval *= 10;
+				pval += fc - '0';
+			}
+
+			action pval_update_scale {
+				switch(fc) {
+					case 'g':
+					case 'G':
+						pval *= 1024;
+					case 'm':
+					case 'M':
+						pval *= 1024;
+					case 'k':
+					case 'K':
+						pval *= 1024;
+						break;
+					default:
+						pval = 0;
+				}
+
 			}
 
 			action from_address {
@@ -131,6 +188,8 @@ smaps_analyze(struct rlist *head)
 				if (!region)
 					fbreak;
 
+				region->private_dirty	= 0;
+				region->shared_dirty	= 0;
 				region->from = afrom;
 				region->to = ato;
 				region->flags = 0;
@@ -143,17 +202,43 @@ smaps_analyze(struct rlist *head)
 				if (fpc[-4] == 'r')
 					region->flags |= SMAP_REGION_R;
 
-				rlist_add_entry(head, region, list);
-
-
+				rlist_add_tail_entry(head, region, list);
 			}
+
+			action update_sdirty {
+				if (!rlist_empty(head)) {
+					struct smap_region *region =
+						rlist_last_entry(head,
+							struct smap_region,
+							list);
+					region->shared_dirty = pval;
+				}
+			}
+
+			action update_pdirty {
+				if (!rlist_empty(head)) {
+					struct smap_region *region =
+						rlist_last_entry(head,
+							struct smap_region,
+							list);
+					region->private_dirty = pval;
+				}
+			}
+
+			eol	=	'\n' %clean_address;
+
+			hv	=	(digit+) $pval_update
+					space+
+					("k" | "K" | "m" | "M" | "g" | "G")
+						$pval_update_scale
+					( "b" | "B" )
+			;
 
 			hx	=	"0" | "1" | "2" | "3" | "4" |
 					"5" | "6" | "7" | "8" | "9" |
 					"a" | "b" | "c" | "d" | "e" | "f" |
 					"A" | "B" | "C" | "D" | "E" | "F";
 
-			eol	=	'\n' %clean_address;
 			address	=	hx{1,16};
 			attrs	=
 					("r" | "-")
@@ -166,6 +251,9 @@ smaps_analyze(struct rlist *head)
 			ato	=	address $address_symbol %to_address;
 
 
+
+
+
 			region	=	(
 						afrom
 						'-'
@@ -174,12 +262,25 @@ smaps_analyze(struct rlist *head)
 						attrs	%attrs_found
 						space
 						text
-						eol %clean_address
+						eol
 					);
+
+			pdirty	=	"Private_Dirty:"
+					space*
+					hv %update_pdirty
+					eol
+			;
+
+			sdirty	=	"Shared_Dirty:"
+					space*
+					hv %update_sdirty
+					eol
+			;
+
 			trash	=	((any - eol)* - region) eol;
+			
 
-
-			main := (region | trash )+;
+			main := ( region | pdirty | sdirty | trash )+;
 			write init;
 			write exec;
 		}%%
@@ -188,6 +289,10 @@ smaps_analyze(struct rlist *head)
 	free(buf);
 }
 
+
+/**
+ * free memory
+ */
 void
 smaps_free(struct rlist *head)
 {
@@ -199,4 +304,42 @@ smaps_free(struct rlist *head)
 	}
 }
 
+/**
+ * compare two smaps (return size(smap_to - smap_from)) 
+ */
+size_t
+smaps_compare(struct rlist *smap_from, struct rlist *smap_to)
+{
+	if (rlist_empty(smap_from))
+		return 0;
+	if (rlist_empty(smap_to))
+		return 0;
+	struct smap_region *rf, *rt;
+
+
+	size_t res = 0;
+	rlist_foreach_entry(rt, smap_to, list) {
+		/* new regions */
+		size_t add_size = rt->to - rt->from;
+		rlist_foreach_entry(rf, smap_from, list) {
+			if(rf->from > rt->to || rf->to < rt->from)
+				continue;
+			add_size = 0;
+			break;
+		}
+		res += add_size;
+
+		/* overlapped regions */
+		rlist_foreach_entry(rf, smap_from, list) {
+			if (rf->from == rt->from && rf->to == rt->to) {
+				if (rt->private_dirty > rf->private_dirty) {
+					res += rt->private_dirty;
+					res -= rf->private_dirty;
+				}
+			}
+		}
+	}
+
+	return res;
+}
 /* vim: set ft=ragel : */

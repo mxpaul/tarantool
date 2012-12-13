@@ -43,7 +43,7 @@
 
 #line 45 "src/smaps_analyze.m"
 static const int smaps_start = 0;
-static const int smaps_first_final = 40;
+static const int smaps_first_final = 138;
 static const int smaps_error = -1;
 
 static const int smaps_en_main = 0;
@@ -52,11 +52,13 @@ static const int smaps_en_main = 0;
 #line 45 "src/smaps_analyze.rl"
 
 
-
+/**
+ * print one map region
+ */
 int
 smaps_print_region(struct smap_region *region)
 {
-	return
+	int res =
 		printf("%p-%p (%c%c%c%c)\n",
 			region->from,
 			region->to,
@@ -65,8 +67,38 @@ smaps_print_region(struct smap_region *region)
 			(region->flags & SMAP_REGION_X) ? 'x' : '-',
 			(region->flags & SMAP_REGION_P) ? 'p' : '-'
 		);
+
+	if (region->shared_dirty > 0) {
+		res += printf("Shared_Dirty: %zu b\n", region->shared_dirty);
+	}
+	if (region->private_dirty > 0) {
+		res += printf("Private_Dirty: %zu b\n", region->private_dirty);
+	}
+
+	return res;
 }
 
+
+/**
+ * print all map regions
+ */
+int
+smaps_print(struct rlist *head)
+{
+	int res = 0;
+	struct smap_region *region;
+	rlist_foreach_entry(region, head, list) {
+		res += smaps_print_region(region);
+	}
+	return res;
+	(void)head;
+	return 1;
+}
+
+
+/**
+ * read information from /proc/self/smaps (if it exists)
+ */
 void
 smaps_analyze(struct rlist *head)
 {
@@ -103,24 +135,28 @@ smaps_analyze(struct rlist *head)
 		char *eof = NULL;
 		int cs;
 		uint64_t address = 0;
+		size_t pval = 0;
 		const char *afrom = NULL;
 		const char *ato = NULL;
 
 		
-#line 111 "src/smaps_analyze.m"
+#line 144 "src/smaps_analyze.m"
 	{
 	cs = smaps_start;
 	}
 
-#line 116 "src/smaps_analyze.m"
+#line 149 "src/smaps_analyze.m"
 	{
 	if ( p == pe )
 		goto _test_eof;
 	switch ( cs )
 	{
 case 0:
-	if ( (*p) == 10 )
-		goto st40;
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 80: goto st29;
+		case 83: goto st42;
+	}
 	if ( (*p) < 65 ) {
 		if ( 48 <= (*p) && (*p) <= 57 )
 			goto tr2;
@@ -130,14 +166,16 @@ case 0:
 	} else
 		goto tr2;
 	goto st1;
-tr15:
-#line 128 "src/smaps_analyze.rl"
+tr17:
+#line 185 "src/smaps_analyze.rl"
 	{
 				struct smap_region *region =
 					malloc(sizeof(struct smap_region));
 				if (!region)
 					{p++; cs = 1; goto _out;}
 
+				region->private_dirty	= 0;
+				region->shared_dirty	= 0;
 				region->from = afrom;
 				region->to = ato;
 				region->flags = 0;
@@ -150,78 +188,80 @@ tr15:
 				if (p[-4] == 'r')
 					region->flags |= SMAP_REGION_R;
 
-				rlist_add_entry(head, region, list);
-
-
+				rlist_add_tail_entry(head, region, list);
 			}
 	goto st1;
-tr45:
-#line 102 "src/smaps_analyze.rl"
+tr149:
+#line 135 "src/smaps_analyze.rl"
 	{
 				afrom = NULL;
 				ato = NULL;
 				address = 0;
+				pval = 0;
 			}
 	goto st1;
 st1:
 	if ( ++p == pe )
 		goto _test_eof1;
 case 1:
-#line 171 "src/smaps_analyze.m"
+#line 208 "src/smaps_analyze.m"
 	if ( (*p) == 10 )
-		goto st40;
+		goto st138;
 	goto st1;
-tr16:
-#line 128 "src/smaps_analyze.rl"
+tr42:
+#line 218 "src/smaps_analyze.rl"
 	{
-				struct smap_region *region =
-					malloc(sizeof(struct smap_region));
-				if (!region)
-					{p++; cs = 40; goto _out;}
-
-				region->from = afrom;
-				region->to = ato;
-				region->flags = 0;
-				if (p[-1] == 'p')
-					region->flags |= SMAP_REGION_P;
-				if (p[-2] == 'x')
-					region->flags |= SMAP_REGION_X;
-				if (p[-3] == 'w')
-					region->flags |= SMAP_REGION_W;
-				if (p[-4] == 'r')
-					region->flags |= SMAP_REGION_R;
-
-				rlist_add_entry(head, region, list);
-
-
+				if (!rlist_empty(head)) {
+					struct smap_region *region =
+						rlist_last_entry(head,
+							struct smap_region,
+							list);
+					region->private_dirty = pval;
+				}
 			}
-	goto st40;
-tr46:
-#line 102 "src/smaps_analyze.rl"
+	goto st138;
+tr74:
+#line 208 "src/smaps_analyze.rl"
+	{
+				if (!rlist_empty(head)) {
+					struct smap_region *region =
+						rlist_last_entry(head,
+							struct smap_region,
+							list);
+					region->shared_dirty = pval;
+				}
+			}
+	goto st138;
+tr150:
+#line 135 "src/smaps_analyze.rl"
 	{
 				afrom = NULL;
 				ato = NULL;
 				address = 0;
+				pval = 0;
 			}
-	goto st40;
-st40:
+	goto st138;
+st138:
 	if ( ++p == pe )
-		goto _test_eof40;
-case 40:
-#line 212 "src/smaps_analyze.m"
-	if ( (*p) == 10 )
-		goto tr46;
+		goto _test_eof138;
+case 138:
+#line 249 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto tr150;
+		case 80: goto tr152;
+		case 83: goto tr153;
+	}
 	if ( (*p) < 65 ) {
 		if ( 48 <= (*p) && (*p) <= 57 )
-			goto tr47;
+			goto tr151;
 	} else if ( (*p) > 70 ) {
 		if ( 97 <= (*p) && (*p) <= 102 )
-			goto tr47;
+			goto tr151;
 	} else
-		goto tr47;
-	goto tr45;
+		goto tr151;
+	goto tr149;
 tr2:
-#line 107 "src/smaps_analyze.rl"
+#line 141 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -235,14 +275,15 @@ tr2:
 				}
 			}
 	goto st2;
-tr47:
-#line 102 "src/smaps_analyze.rl"
+tr151:
+#line 135 "src/smaps_analyze.rl"
 	{
 				afrom = NULL;
 				ato = NULL;
 				address = 0;
+				pval = 0;
 			}
-#line 107 "src/smaps_analyze.rl"
+#line 141 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -260,22 +301,22 @@ st2:
 	if ( ++p == pe )
 		goto _test_eof2;
 case 2:
-#line 264 "src/smaps_analyze.m"
+#line 305 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto st40;
-		case 45: goto tr3;
+		case 10: goto st138;
+		case 45: goto tr5;
 	}
 	if ( (*p) < 65 ) {
 		if ( 48 <= (*p) && (*p) <= 57 )
-			goto tr4;
+			goto tr6;
 	} else if ( (*p) > 70 ) {
 		if ( 97 <= (*p) && (*p) <= 102 )
-			goto tr4;
+			goto tr6;
 	} else
-		goto tr4;
+		goto tr6;
 	goto st1;
-tr3:
-#line 120 "src/smaps_analyze.rl"
+tr5:
+#line 177 "src/smaps_analyze.rl"
 	{
 				afrom = (typeof(afrom))address;
 				address = 0;
@@ -285,20 +326,20 @@ st3:
 	if ( ++p == pe )
 		goto _test_eof3;
 case 3:
-#line 289 "src/smaps_analyze.m"
+#line 330 "src/smaps_analyze.m"
 	if ( (*p) == 10 )
-		goto st40;
+		goto st138;
 	if ( (*p) < 65 ) {
 		if ( 48 <= (*p) && (*p) <= 57 )
-			goto tr5;
+			goto tr7;
 	} else if ( (*p) > 70 ) {
 		if ( 97 <= (*p) && (*p) <= 102 )
-			goto tr5;
+			goto tr7;
 	} else
-		goto tr5;
+		goto tr7;
 	goto st1;
-tr5:
-#line 107 "src/smaps_analyze.rl"
+tr7:
+#line 141 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -316,45 +357,46 @@ st4:
 	if ( ++p == pe )
 		goto _test_eof4;
 case 4:
-#line 320 "src/smaps_analyze.m"
+#line 361 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto tr7;
-		case 32: goto tr6;
+		case 10: goto tr9;
+		case 32: goto tr8;
 	}
 	if ( (*p) < 48 ) {
 		if ( 9 <= (*p) && (*p) <= 13 )
-			goto tr6;
+			goto tr8;
 	} else if ( (*p) > 57 ) {
 		if ( (*p) > 70 ) {
 			if ( 97 <= (*p) && (*p) <= 102 )
-				goto tr8;
+				goto tr10;
 		} else if ( (*p) >= 65 )
-			goto tr8;
+			goto tr10;
 	} else
-		goto tr8;
+		goto tr10;
 	goto st1;
-tr6:
-#line 124 "src/smaps_analyze.rl"
+tr8:
+#line 181 "src/smaps_analyze.rl"
 	{
 				ato = (typeof(ato))address;
 
 			}
 	goto st5;
-tr48:
-#line 102 "src/smaps_analyze.rl"
+tr154:
+#line 135 "src/smaps_analyze.rl"
 	{
 				afrom = NULL;
 				ato = NULL;
 				address = 0;
+				pval = 0;
 			}
 	goto st5;
 st5:
 	if ( ++p == pe )
 		goto _test_eof5;
 case 5:
-#line 356 "src/smaps_analyze.m"
+#line 398 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto st41;
+		case 10: goto st139;
 		case 32: goto st5;
 		case 45: goto st6;
 		case 114: goto st6;
@@ -362,59 +404,63 @@ case 5:
 	if ( 9 <= (*p) && (*p) <= 13 )
 		goto st5;
 	goto st1;
-tr7:
-#line 124 "src/smaps_analyze.rl"
+tr9:
+#line 181 "src/smaps_analyze.rl"
 	{
 				ato = (typeof(ato))address;
 
 			}
-	goto st41;
-tr49:
-#line 102 "src/smaps_analyze.rl"
+	goto st139;
+tr155:
+#line 135 "src/smaps_analyze.rl"
 	{
 				afrom = NULL;
 				ato = NULL;
 				address = 0;
+				pval = 0;
 			}
-	goto st41;
-st41:
+	goto st139;
+st139:
 	if ( ++p == pe )
-		goto _test_eof41;
-case 41:
-#line 385 "src/smaps_analyze.m"
+		goto _test_eof139;
+case 139:
+#line 428 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto tr49;
-		case 32: goto tr48;
-		case 45: goto tr50;
-		case 114: goto tr50;
+		case 10: goto tr155;
+		case 32: goto tr154;
+		case 45: goto tr156;
+		case 80: goto tr152;
+		case 83: goto tr153;
+		case 114: goto tr156;
 	}
 	if ( (*p) < 48 ) {
 		if ( 9 <= (*p) && (*p) <= 13 )
-			goto tr48;
+			goto tr154;
 	} else if ( (*p) > 57 ) {
 		if ( (*p) > 70 ) {
 			if ( 97 <= (*p) && (*p) <= 102 )
-				goto tr47;
+				goto tr151;
 		} else if ( (*p) >= 65 )
-			goto tr47;
+			goto tr151;
 	} else
-		goto tr47;
-	goto tr45;
-tr50:
-#line 102 "src/smaps_analyze.rl"
+		goto tr151;
+	goto tr149;
+tr156:
+#line 135 "src/smaps_analyze.rl"
 	{
 				afrom = NULL;
 				ato = NULL;
 				address = 0;
+				pval = 0;
 			}
 	goto st6;
 st6:
 	if ( ++p == pe )
 		goto _test_eof6;
 case 6:
-#line 416 "src/smaps_analyze.m"
+#line 462 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto st40;
+		case 10: goto st138;
 		case 45: goto st7;
 		case 119: goto st7;
 	}
@@ -424,7 +470,7 @@ st7:
 		goto _test_eof7;
 case 7:
 	switch( (*p) ) {
-		case 10: goto st40;
+		case 10: goto st138;
 		case 45: goto st8;
 		case 120: goto st8;
 	}
@@ -434,7 +480,7 @@ st8:
 		goto _test_eof8;
 case 8:
 	switch( (*p) ) {
-		case 10: goto st40;
+		case 10: goto st138;
 		case 45: goto st9;
 		case 112: goto st9;
 	}
@@ -444,545 +490,316 @@ st9:
 		goto _test_eof9;
 case 9:
 	switch( (*p) ) {
-		case 10: goto tr16;
-		case 32: goto tr15;
+		case 10: goto tr18;
+		case 32: goto tr17;
 	}
 	if ( 9 <= (*p) && (*p) <= 13 )
-		goto tr15;
+		goto tr17;
 	goto st1;
-tr8:
-#line 107 "src/smaps_analyze.rl"
+tr18:
+#line 185 "src/smaps_analyze.rl"
 	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
+				struct smap_region *region =
+					malloc(sizeof(struct smap_region));
+				if (!region)
+					{p++; cs = 140; goto _out;}
+
+				region->private_dirty	= 0;
+				region->shared_dirty	= 0;
+				region->from = afrom;
+				region->to = ato;
+				region->flags = 0;
+				if (p[-1] == 'p')
+					region->flags |= SMAP_REGION_P;
+				if (p[-2] == 'x')
+					region->flags |= SMAP_REGION_X;
+				if (p[-3] == 'w')
+					region->flags |= SMAP_REGION_W;
+				if (p[-4] == 'r')
+					region->flags |= SMAP_REGION_R;
+
+				rlist_add_tail_entry(head, region, list);
+			}
+	goto st140;
+st140:
+	if ( ++p == pe )
+		goto _test_eof140;
+case 140:
+#line 529 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto tr150;
+		case 80: goto tr157;
+		case 83: goto tr158;
+	}
+	if ( (*p) < 65 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr151;
+	} else if ( (*p) > 70 ) {
+		if ( 97 <= (*p) && (*p) <= 102 )
+			goto tr151;
+	} else
+		goto tr151;
+	goto tr149;
+tr157:
+#line 135 "src/smaps_analyze.rl"
+	{
+				afrom = NULL;
+				ato = NULL;
+				address = 0;
+				pval = 0;
 			}
 	goto st10;
 st10:
 	if ( ++p == pe )
 		goto _test_eof10;
 case 10:
-#line 473 "src/smaps_analyze.m"
+#line 557 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto tr7;
-		case 32: goto tr6;
+		case 10: goto st138;
+		case 114: goto st11;
 	}
-	if ( (*p) < 48 ) {
-		if ( 9 <= (*p) && (*p) <= 13 )
-			goto tr6;
-	} else if ( (*p) > 57 ) {
-		if ( (*p) > 70 ) {
-			if ( 97 <= (*p) && (*p) <= 102 )
-				goto tr17;
-		} else if ( (*p) >= 65 )
-			goto tr17;
-	} else
-		goto tr17;
 	goto st1;
-tr17:
-#line 107 "src/smaps_analyze.rl"
-	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
-			}
-	goto st11;
 st11:
 	if ( ++p == pe )
 		goto _test_eof11;
 case 11:
-#line 509 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto tr7;
-		case 32: goto tr6;
+		case 10: goto st138;
+		case 105: goto st12;
 	}
-	if ( (*p) < 48 ) {
-		if ( 9 <= (*p) && (*p) <= 13 )
-			goto tr6;
-	} else if ( (*p) > 57 ) {
-		if ( (*p) > 70 ) {
-			if ( 97 <= (*p) && (*p) <= 102 )
-				goto tr18;
-		} else if ( (*p) >= 65 )
-			goto tr18;
-	} else
-		goto tr18;
 	goto st1;
-tr18:
-#line 107 "src/smaps_analyze.rl"
-	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
-			}
-	goto st12;
 st12:
 	if ( ++p == pe )
 		goto _test_eof12;
 case 12:
-#line 545 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto tr7;
-		case 32: goto tr6;
+		case 10: goto st138;
+		case 118: goto st13;
 	}
-	if ( (*p) < 48 ) {
-		if ( 9 <= (*p) && (*p) <= 13 )
-			goto tr6;
-	} else if ( (*p) > 57 ) {
-		if ( (*p) > 70 ) {
-			if ( 97 <= (*p) && (*p) <= 102 )
-				goto tr19;
-		} else if ( (*p) >= 65 )
-			goto tr19;
-	} else
-		goto tr19;
 	goto st1;
-tr19:
-#line 107 "src/smaps_analyze.rl"
-	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
-			}
-	goto st13;
 st13:
 	if ( ++p == pe )
 		goto _test_eof13;
 case 13:
-#line 581 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto tr7;
-		case 32: goto tr6;
+		case 10: goto st138;
+		case 97: goto st14;
 	}
-	if ( (*p) < 48 ) {
-		if ( 9 <= (*p) && (*p) <= 13 )
-			goto tr6;
-	} else if ( (*p) > 57 ) {
-		if ( (*p) > 70 ) {
-			if ( 97 <= (*p) && (*p) <= 102 )
-				goto tr20;
-		} else if ( (*p) >= 65 )
-			goto tr20;
-	} else
-		goto tr20;
 	goto st1;
-tr20:
-#line 107 "src/smaps_analyze.rl"
-	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
-			}
-	goto st14;
 st14:
 	if ( ++p == pe )
 		goto _test_eof14;
 case 14:
-#line 617 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto tr7;
-		case 32: goto tr6;
+		case 10: goto st138;
+		case 116: goto st15;
 	}
-	if ( (*p) < 48 ) {
-		if ( 9 <= (*p) && (*p) <= 13 )
-			goto tr6;
-	} else if ( (*p) > 57 ) {
-		if ( (*p) > 70 ) {
-			if ( 97 <= (*p) && (*p) <= 102 )
-				goto tr21;
-		} else if ( (*p) >= 65 )
-			goto tr21;
-	} else
-		goto tr21;
 	goto st1;
-tr21:
-#line 107 "src/smaps_analyze.rl"
-	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
-			}
-	goto st15;
 st15:
 	if ( ++p == pe )
 		goto _test_eof15;
 case 15:
-#line 653 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto tr7;
-		case 32: goto tr6;
+		case 10: goto st138;
+		case 101: goto st16;
 	}
-	if ( (*p) < 48 ) {
-		if ( 9 <= (*p) && (*p) <= 13 )
-			goto tr6;
-	} else if ( (*p) > 57 ) {
-		if ( (*p) > 70 ) {
-			if ( 97 <= (*p) && (*p) <= 102 )
-				goto tr22;
-		} else if ( (*p) >= 65 )
-			goto tr22;
-	} else
-		goto tr22;
 	goto st1;
-tr22:
-#line 107 "src/smaps_analyze.rl"
-	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
-			}
-	goto st16;
 st16:
 	if ( ++p == pe )
 		goto _test_eof16;
 case 16:
-#line 689 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto tr7;
-		case 32: goto tr6;
+		case 10: goto st138;
+		case 95: goto st17;
 	}
-	if ( (*p) < 48 ) {
-		if ( 9 <= (*p) && (*p) <= 13 )
-			goto tr6;
-	} else if ( (*p) > 57 ) {
-		if ( (*p) > 70 ) {
-			if ( 97 <= (*p) && (*p) <= 102 )
-				goto tr23;
-		} else if ( (*p) >= 65 )
-			goto tr23;
-	} else
-		goto tr23;
 	goto st1;
-tr23:
-#line 107 "src/smaps_analyze.rl"
-	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
-			}
-	goto st17;
 st17:
 	if ( ++p == pe )
 		goto _test_eof17;
 case 17:
-#line 725 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto tr7;
-		case 32: goto tr6;
+		case 10: goto st138;
+		case 68: goto st18;
 	}
-	if ( (*p) < 48 ) {
-		if ( 9 <= (*p) && (*p) <= 13 )
-			goto tr6;
-	} else if ( (*p) > 57 ) {
-		if ( (*p) > 70 ) {
-			if ( 97 <= (*p) && (*p) <= 102 )
-				goto tr24;
-		} else if ( (*p) >= 65 )
-			goto tr24;
-	} else
-		goto tr24;
 	goto st1;
-tr24:
-#line 107 "src/smaps_analyze.rl"
-	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
-			}
-	goto st18;
 st18:
 	if ( ++p == pe )
 		goto _test_eof18;
 case 18:
-#line 761 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto tr7;
-		case 32: goto tr6;
+		case 10: goto st138;
+		case 105: goto st19;
 	}
-	if ( (*p) < 48 ) {
-		if ( 9 <= (*p) && (*p) <= 13 )
-			goto tr6;
-	} else if ( (*p) > 57 ) {
-		if ( (*p) > 70 ) {
-			if ( 97 <= (*p) && (*p) <= 102 )
-				goto tr25;
-		} else if ( (*p) >= 65 )
-			goto tr25;
-	} else
-		goto tr25;
 	goto st1;
-tr25:
-#line 107 "src/smaps_analyze.rl"
-	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
-			}
-	goto st19;
 st19:
 	if ( ++p == pe )
 		goto _test_eof19;
 case 19:
-#line 797 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto tr7;
-		case 32: goto tr6;
+		case 10: goto st138;
+		case 114: goto st20;
 	}
-	if ( (*p) < 48 ) {
-		if ( 9 <= (*p) && (*p) <= 13 )
-			goto tr6;
-	} else if ( (*p) > 57 ) {
-		if ( (*p) > 70 ) {
-			if ( 97 <= (*p) && (*p) <= 102 )
-				goto tr26;
-		} else if ( (*p) >= 65 )
-			goto tr26;
-	} else
-		goto tr26;
 	goto st1;
-tr26:
-#line 107 "src/smaps_analyze.rl"
-	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
-			}
-	goto st20;
 st20:
 	if ( ++p == pe )
 		goto _test_eof20;
 case 20:
-#line 833 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto tr7;
-		case 32: goto tr6;
+		case 10: goto st138;
+		case 116: goto st21;
 	}
-	if ( (*p) < 48 ) {
-		if ( 9 <= (*p) && (*p) <= 13 )
-			goto tr6;
-	} else if ( (*p) > 57 ) {
-		if ( (*p) > 70 ) {
-			if ( 97 <= (*p) && (*p) <= 102 )
-				goto tr27;
-		} else if ( (*p) >= 65 )
-			goto tr27;
-	} else
-		goto tr27;
 	goto st1;
-tr27:
-#line 107 "src/smaps_analyze.rl"
-	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
-			}
-	goto st21;
 st21:
 	if ( ++p == pe )
 		goto _test_eof21;
 case 21:
-#line 869 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto tr7;
-		case 32: goto tr6;
+		case 10: goto st138;
+		case 121: goto st22;
 	}
-	if ( (*p) < 48 ) {
-		if ( 9 <= (*p) && (*p) <= 13 )
-			goto tr6;
-	} else if ( (*p) > 57 ) {
-		if ( (*p) > 70 ) {
-			if ( 97 <= (*p) && (*p) <= 102 )
-				goto tr28;
-		} else if ( (*p) >= 65 )
-			goto tr28;
-	} else
-		goto tr28;
 	goto st1;
-tr28:
-#line 107 "src/smaps_analyze.rl"
-	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
-			}
-	goto st22;
 st22:
 	if ( ++p == pe )
 		goto _test_eof22;
 case 22:
-#line 905 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto tr7;
-		case 32: goto tr6;
+		case 10: goto st138;
+		case 58: goto st23;
 	}
-	if ( (*p) < 48 ) {
-		if ( 9 <= (*p) && (*p) <= 13 )
-			goto tr6;
-	} else if ( (*p) > 57 ) {
-		if ( (*p) > 70 ) {
-			if ( 97 <= (*p) && (*p) <= 102 )
-				goto tr29;
-		} else if ( (*p) >= 65 )
-			goto tr29;
-	} else
-		goto tr29;
 	goto st1;
-tr29:
-#line 107 "src/smaps_analyze.rl"
-	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
-			}
-	goto st23;
 st23:
 	if ( ++p == pe )
 		goto _test_eof23;
 case 23:
-#line 941 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto tr7;
-		case 32: goto tr6;
+		case 10: goto st141;
+		case 32: goto st23;
+	}
+	if ( (*p) > 13 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr33;
+	} else if ( (*p) >= 9 )
+		goto st23;
+	goto st1;
+st141:
+	if ( ++p == pe )
+		goto _test_eof141;
+case 141:
+	switch( (*p) ) {
+		case 10: goto tr160;
+		case 32: goto tr159;
+		case 80: goto tr152;
+		case 83: goto tr153;
 	}
 	if ( (*p) < 48 ) {
 		if ( 9 <= (*p) && (*p) <= 13 )
-			goto tr6;
+			goto tr159;
 	} else if ( (*p) > 57 ) {
 		if ( (*p) > 70 ) {
 			if ( 97 <= (*p) && (*p) <= 102 )
-				goto tr30;
+				goto tr151;
 		} else if ( (*p) >= 65 )
-			goto tr30;
+			goto tr151;
 	} else
-		goto tr30;
-	goto st1;
-tr30:
-#line 107 "src/smaps_analyze.rl"
+		goto tr161;
+	goto tr149;
+tr159:
+#line 135 "src/smaps_analyze.rl"
 	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
+				afrom = NULL;
+				ato = NULL;
+				address = 0;
+				pval = 0;
 			}
 	goto st24;
 st24:
 	if ( ++p == pe )
 		goto _test_eof24;
 case 24:
-#line 977 "src/smaps_analyze.m"
+#line 720 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto tr7;
-		case 32: goto tr6;
+		case 10: goto st142;
+		case 32: goto st24;
 	}
-	if ( 9 <= (*p) && (*p) <= 13 )
-		goto tr6;
+	if ( (*p) > 13 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr36;
+	} else if ( (*p) >= 9 )
+		goto st24;
 	goto st1;
-tr4:
-#line 107 "src/smaps_analyze.rl"
+tr160:
+#line 135 "src/smaps_analyze.rl"
+	{
+				afrom = NULL;
+				ato = NULL;
+				address = 0;
+				pval = 0;
+			}
+	goto st142;
+st142:
+	if ( ++p == pe )
+		goto _test_eof142;
+case 142:
+#line 744 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto tr160;
+		case 32: goto tr159;
+		case 80: goto tr152;
+		case 83: goto tr153;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto tr159;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr151;
+		} else if ( (*p) >= 65 )
+			goto tr151;
+	} else
+		goto tr162;
+	goto tr149;
+tr161:
+#line 135 "src/smaps_analyze.rl"
+	{
+				afrom = NULL;
+				ato = NULL;
+				address = 0;
+				pval = 0;
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st25;
+tr162:
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+#line 135 "src/smaps_analyze.rl"
+	{
+				afrom = NULL;
+				ato = NULL;
+				address = 0;
+				pval = 0;
+			}
+#line 141 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -1000,451 +817,496 @@ st25:
 	if ( ++p == pe )
 		goto _test_eof25;
 case 25:
-#line 1004 "src/smaps_analyze.m"
+#line 821 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto st40;
-		case 45: goto tr3;
+		case 10: goto st143;
+		case 32: goto st26;
+		case 45: goto tr5;
 	}
-	if ( (*p) < 65 ) {
-		if ( 48 <= (*p) && (*p) <= 57 )
-			goto tr31;
-	} else if ( (*p) > 70 ) {
-		if ( 97 <= (*p) && (*p) <= 102 )
-			goto tr31;
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st26;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr6;
+		} else if ( (*p) >= 65 )
+			goto tr6;
 	} else
-		goto tr31;
+		goto tr39;
 	goto st1;
-tr31:
-#line 107 "src/smaps_analyze.rl"
+tr163:
+#line 135 "src/smaps_analyze.rl"
 	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
+				afrom = NULL;
+				ato = NULL;
+				address = 0;
+				pval = 0;
 			}
 	goto st26;
 st26:
 	if ( ++p == pe )
 		goto _test_eof26;
 case 26:
-#line 1037 "src/smaps_analyze.m"
+#line 852 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto st40;
-		case 45: goto tr3;
+		case 10: goto st143;
+		case 32: goto st26;
+		case 71: goto tr40;
+		case 75: goto tr40;
+		case 77: goto tr40;
+		case 103: goto tr40;
+		case 107: goto tr40;
+		case 109: goto tr40;
 	}
-	if ( (*p) < 65 ) {
-		if ( 48 <= (*p) && (*p) <= 57 )
-			goto tr32;
-	} else if ( (*p) > 70 ) {
-		if ( 97 <= (*p) && (*p) <= 102 )
-			goto tr32;
-	} else
-		goto tr32;
+	if ( 9 <= (*p) && (*p) <= 13 )
+		goto st26;
 	goto st1;
-tr32:
-#line 107 "src/smaps_analyze.rl"
+tr164:
+#line 135 "src/smaps_analyze.rl"
 	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
+				afrom = NULL;
+				ato = NULL;
+				address = 0;
+				pval = 0;
+			}
+	goto st143;
+st143:
+	if ( ++p == pe )
+		goto _test_eof143;
+case 143:
+#line 879 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto tr164;
+		case 32: goto tr163;
+		case 71: goto tr165;
+		case 75: goto tr165;
+		case 77: goto tr165;
+		case 80: goto tr152;
+		case 83: goto tr153;
+		case 103: goto tr165;
+		case 107: goto tr165;
+		case 109: goto tr165;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto tr163;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr151;
+		} else if ( (*p) >= 65 )
+			goto tr151;
+	} else
+		goto tr151;
+	goto tr149;
+tr40:
+#line 159 "src/smaps_analyze.rl"
+	{
+				switch((*p)) {
+					case 'g':
+					case 'G':
+						pval *= 1024;
+					case 'm':
+					case 'M':
+						pval *= 1024;
+					case 'k':
+					case 'K':
+						pval *= 1024;
+						break;
+					default:
+						pval = 0;
 				}
+
+			}
+	goto st27;
+tr165:
+#line 159 "src/smaps_analyze.rl"
+	{
+				switch((*p)) {
+					case 'g':
+					case 'G':
+						pval *= 1024;
+					case 'm':
+					case 'M':
+						pval *= 1024;
+					case 'k':
+					case 'K':
+						pval *= 1024;
+						break;
+					default:
+						pval = 0;
+				}
+
+			}
+#line 135 "src/smaps_analyze.rl"
+	{
+				afrom = NULL;
+				ato = NULL;
+				address = 0;
+				pval = 0;
+			}
+	goto st27;
+tr172:
+#line 135 "src/smaps_analyze.rl"
+	{
+				afrom = NULL;
+				ato = NULL;
+				address = 0;
+				pval = 0;
+			}
+#line 159 "src/smaps_analyze.rl"
+	{
+				switch((*p)) {
+					case 'g':
+					case 'G':
+						pval *= 1024;
+					case 'm':
+					case 'M':
+						pval *= 1024;
+					case 'k':
+					case 'K':
+						pval *= 1024;
+						break;
+					default:
+						pval = 0;
+				}
+
 			}
 	goto st27;
 st27:
 	if ( ++p == pe )
 		goto _test_eof27;
 case 27:
-#line 1070 "src/smaps_analyze.m"
+#line 982 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto st40;
-		case 45: goto tr3;
+		case 10: goto st138;
+		case 66: goto st28;
+		case 98: goto st28;
 	}
-	if ( (*p) < 65 ) {
-		if ( 48 <= (*p) && (*p) <= 57 )
-			goto tr33;
-	} else if ( (*p) > 70 ) {
-		if ( 97 <= (*p) && (*p) <= 102 )
-			goto tr33;
-	} else
-		goto tr33;
 	goto st1;
-tr33:
-#line 107 "src/smaps_analyze.rl"
-	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
-			}
-	goto st28;
 st28:
 	if ( ++p == pe )
 		goto _test_eof28;
 case 28:
-#line 1103 "src/smaps_analyze.m"
-	switch( (*p) ) {
-		case 10: goto st40;
-		case 45: goto tr3;
-	}
-	if ( (*p) < 65 ) {
-		if ( 48 <= (*p) && (*p) <= 57 )
-			goto tr34;
-	} else if ( (*p) > 70 ) {
-		if ( 97 <= (*p) && (*p) <= 102 )
-			goto tr34;
-	} else
-		goto tr34;
+	if ( (*p) == 10 )
+		goto tr42;
 	goto st1;
-tr34:
-#line 107 "src/smaps_analyze.rl"
+tr152:
+#line 135 "src/smaps_analyze.rl"
 	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
+				afrom = NULL;
+				ato = NULL;
+				address = 0;
+				pval = 0;
 			}
 	goto st29;
 st29:
 	if ( ++p == pe )
 		goto _test_eof29;
 case 29:
-#line 1136 "src/smaps_analyze.m"
+#line 1009 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto st40;
-		case 45: goto tr3;
+		case 10: goto st138;
+		case 114: goto st30;
 	}
-	if ( (*p) < 65 ) {
-		if ( 48 <= (*p) && (*p) <= 57 )
-			goto tr35;
-	} else if ( (*p) > 70 ) {
-		if ( 97 <= (*p) && (*p) <= 102 )
-			goto tr35;
-	} else
-		goto tr35;
 	goto st1;
-tr35:
-#line 107 "src/smaps_analyze.rl"
-	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
-			}
-	goto st30;
 st30:
 	if ( ++p == pe )
 		goto _test_eof30;
 case 30:
-#line 1169 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto st40;
-		case 45: goto tr3;
+		case 10: goto st138;
+		case 105: goto st31;
 	}
-	if ( (*p) < 65 ) {
-		if ( 48 <= (*p) && (*p) <= 57 )
-			goto tr36;
-	} else if ( (*p) > 70 ) {
-		if ( 97 <= (*p) && (*p) <= 102 )
-			goto tr36;
-	} else
-		goto tr36;
 	goto st1;
-tr36:
-#line 107 "src/smaps_analyze.rl"
-	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
-			}
-	goto st31;
 st31:
 	if ( ++p == pe )
 		goto _test_eof31;
 case 31:
-#line 1202 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto st40;
-		case 45: goto tr3;
+		case 10: goto st138;
+		case 118: goto st32;
 	}
-	if ( (*p) < 65 ) {
-		if ( 48 <= (*p) && (*p) <= 57 )
-			goto tr37;
-	} else if ( (*p) > 70 ) {
-		if ( 97 <= (*p) && (*p) <= 102 )
-			goto tr37;
-	} else
-		goto tr37;
 	goto st1;
-tr37:
-#line 107 "src/smaps_analyze.rl"
-	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
-			}
-	goto st32;
 st32:
 	if ( ++p == pe )
 		goto _test_eof32;
 case 32:
-#line 1235 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto st40;
-		case 45: goto tr3;
+		case 10: goto st138;
+		case 97: goto st33;
 	}
-	if ( (*p) < 65 ) {
-		if ( 48 <= (*p) && (*p) <= 57 )
-			goto tr38;
-	} else if ( (*p) > 70 ) {
-		if ( 97 <= (*p) && (*p) <= 102 )
-			goto tr38;
-	} else
-		goto tr38;
 	goto st1;
-tr38:
-#line 107 "src/smaps_analyze.rl"
-	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
-			}
-	goto st33;
 st33:
 	if ( ++p == pe )
 		goto _test_eof33;
 case 33:
-#line 1268 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto st40;
-		case 45: goto tr3;
+		case 10: goto st138;
+		case 116: goto st34;
 	}
-	if ( (*p) < 65 ) {
-		if ( 48 <= (*p) && (*p) <= 57 )
-			goto tr39;
-	} else if ( (*p) > 70 ) {
-		if ( 97 <= (*p) && (*p) <= 102 )
-			goto tr39;
-	} else
-		goto tr39;
 	goto st1;
-tr39:
-#line 107 "src/smaps_analyze.rl"
-	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
-			}
-	goto st34;
 st34:
 	if ( ++p == pe )
 		goto _test_eof34;
 case 34:
-#line 1301 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto st40;
-		case 45: goto tr3;
+		case 10: goto st138;
+		case 101: goto st35;
 	}
-	if ( (*p) < 65 ) {
-		if ( 48 <= (*p) && (*p) <= 57 )
-			goto tr40;
-	} else if ( (*p) > 70 ) {
-		if ( 97 <= (*p) && (*p) <= 102 )
-			goto tr40;
-	} else
-		goto tr40;
 	goto st1;
-tr40:
-#line 107 "src/smaps_analyze.rl"
-	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
-			}
-	goto st35;
 st35:
 	if ( ++p == pe )
 		goto _test_eof35;
 case 35:
-#line 1334 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto st40;
-		case 45: goto tr3;
+		case 10: goto st138;
+		case 95: goto st36;
 	}
-	if ( (*p) < 65 ) {
-		if ( 48 <= (*p) && (*p) <= 57 )
-			goto tr41;
-	} else if ( (*p) > 70 ) {
-		if ( 97 <= (*p) && (*p) <= 102 )
-			goto tr41;
-	} else
-		goto tr41;
 	goto st1;
-tr41:
-#line 107 "src/smaps_analyze.rl"
-	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
-			}
-	goto st36;
 st36:
 	if ( ++p == pe )
 		goto _test_eof36;
 case 36:
-#line 1367 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto st40;
-		case 45: goto tr3;
+		case 10: goto st138;
+		case 68: goto st37;
 	}
-	if ( (*p) < 65 ) {
-		if ( 48 <= (*p) && (*p) <= 57 )
-			goto tr42;
-	} else if ( (*p) > 70 ) {
-		if ( 97 <= (*p) && (*p) <= 102 )
-			goto tr42;
-	} else
-		goto tr42;
 	goto st1;
-tr42:
-#line 107 "src/smaps_analyze.rl"
-	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
-			}
-	goto st37;
 st37:
 	if ( ++p == pe )
 		goto _test_eof37;
 case 37:
-#line 1400 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto st40;
-		case 45: goto tr3;
+		case 10: goto st138;
+		case 105: goto st38;
 	}
-	if ( (*p) < 65 ) {
-		if ( 48 <= (*p) && (*p) <= 57 )
-			goto tr43;
-	} else if ( (*p) > 70 ) {
-		if ( 97 <= (*p) && (*p) <= 102 )
-			goto tr43;
-	} else
-		goto tr43;
 	goto st1;
-tr43:
-#line 107 "src/smaps_analyze.rl"
-	{
-				if ((*p) >= 'a' && (*p) <= 'f') {
-					address <<= 4;
-					address |= ((*p) - 'a' + 10) & 0x0F;
-				} else if ((*p) >= 'A' && (*p) <= 'F') {
-					address <<= 4;
-					address |= ((*p) - 'A' + 10) & 0x0F;
-				} else {
-					address <<= 4;
-					address |= ( (*p) - '0') & 0x0F;
-				}
-			}
-	goto st38;
 st38:
 	if ( ++p == pe )
 		goto _test_eof38;
 case 38:
-#line 1433 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto st40;
-		case 45: goto tr3;
+		case 10: goto st138;
+		case 114: goto st39;
 	}
-	if ( (*p) < 65 ) {
-		if ( 48 <= (*p) && (*p) <= 57 )
-			goto tr44;
-	} else if ( (*p) > 70 ) {
-		if ( 97 <= (*p) && (*p) <= 102 )
-			goto tr44;
-	} else
-		goto tr44;
 	goto st1;
-tr44:
-#line 107 "src/smaps_analyze.rl"
+st39:
+	if ( ++p == pe )
+		goto _test_eof39;
+case 39:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 116: goto st40;
+	}
+	goto st1;
+st40:
+	if ( ++p == pe )
+		goto _test_eof40;
+case 40:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 121: goto st41;
+	}
+	goto st1;
+st41:
+	if ( ++p == pe )
+		goto _test_eof41;
+case 41:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 58: goto st24;
+	}
+	goto st1;
+tr153:
+#line 135 "src/smaps_analyze.rl"
+	{
+				afrom = NULL;
+				ato = NULL;
+				address = 0;
+				pval = 0;
+			}
+	goto st42;
+st42:
+	if ( ++p == pe )
+		goto _test_eof42;
+case 42:
+#line 1136 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 104: goto st43;
+	}
+	goto st1;
+st43:
+	if ( ++p == pe )
+		goto _test_eof43;
+case 43:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 97: goto st44;
+	}
+	goto st1;
+st44:
+	if ( ++p == pe )
+		goto _test_eof44;
+case 44:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 114: goto st45;
+	}
+	goto st1;
+st45:
+	if ( ++p == pe )
+		goto _test_eof45;
+case 45:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 101: goto st46;
+	}
+	goto st1;
+st46:
+	if ( ++p == pe )
+		goto _test_eof46;
+case 46:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 100: goto st47;
+	}
+	goto st1;
+st47:
+	if ( ++p == pe )
+		goto _test_eof47;
+case 47:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 95: goto st48;
+	}
+	goto st1;
+st48:
+	if ( ++p == pe )
+		goto _test_eof48;
+case 48:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 68: goto st49;
+	}
+	goto st1;
+st49:
+	if ( ++p == pe )
+		goto _test_eof49;
+case 49:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 105: goto st50;
+	}
+	goto st1;
+st50:
+	if ( ++p == pe )
+		goto _test_eof50;
+case 50:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 114: goto st51;
+	}
+	goto st1;
+st51:
+	if ( ++p == pe )
+		goto _test_eof51;
+case 51:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 116: goto st52;
+	}
+	goto st1;
+st52:
+	if ( ++p == pe )
+		goto _test_eof52;
+case 52:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 121: goto st53;
+	}
+	goto st1;
+st53:
+	if ( ++p == pe )
+		goto _test_eof53;
+case 53:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 58: goto st54;
+	}
+	goto st1;
+tr166:
+#line 135 "src/smaps_analyze.rl"
+	{
+				afrom = NULL;
+				ato = NULL;
+				address = 0;
+				pval = 0;
+			}
+	goto st54;
+st54:
+	if ( ++p == pe )
+		goto _test_eof54;
+case 54:
+#line 1254 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st144;
+		case 32: goto st54;
+	}
+	if ( (*p) > 13 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr68;
+	} else if ( (*p) >= 9 )
+		goto st54;
+	goto st1;
+tr167:
+#line 135 "src/smaps_analyze.rl"
+	{
+				afrom = NULL;
+				ato = NULL;
+				address = 0;
+				pval = 0;
+			}
+	goto st144;
+st144:
+	if ( ++p == pe )
+		goto _test_eof144;
+case 144:
+#line 1278 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto tr167;
+		case 32: goto tr166;
+		case 80: goto tr152;
+		case 83: goto tr153;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto tr166;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr151;
+		} else if ( (*p) >= 65 )
+			goto tr151;
+	} else
+		goto tr168;
+	goto tr149;
+tr173:
+#line 135 "src/smaps_analyze.rl"
+	{
+				afrom = NULL;
+				ato = NULL;
+				address = 0;
+				pval = 0;
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+#line 141 "src/smaps_analyze.rl"
 	{
 				if ((*p) >= 'a' && (*p) <= 'f') {
 					address <<= 4;
@@ -1457,29 +1319,2824 @@ tr44:
 					address |= ( (*p) - '0') & 0x0F;
 				}
 			}
-	goto st39;
-st39:
+	goto st55;
+tr168:
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+#line 135 "src/smaps_analyze.rl"
+	{
+				afrom = NULL;
+				ato = NULL;
+				address = 0;
+				pval = 0;
+			}
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st55;
+st55:
 	if ( ++p == pe )
-		goto _test_eof39;
-case 39:
-#line 1466 "src/smaps_analyze.m"
+		goto _test_eof55;
+case 55:
+#line 1355 "src/smaps_analyze.m"
 	switch( (*p) ) {
-		case 10: goto st40;
-		case 45: goto tr3;
+		case 10: goto st145;
+		case 32: goto st56;
+		case 45: goto tr5;
 	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st56;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr6;
+		} else if ( (*p) >= 65 )
+			goto tr6;
+	} else
+		goto tr71;
+	goto st1;
+tr169:
+#line 135 "src/smaps_analyze.rl"
+	{
+				afrom = NULL;
+				ato = NULL;
+				address = 0;
+				pval = 0;
+			}
+	goto st56;
+st56:
+	if ( ++p == pe )
+		goto _test_eof56;
+case 56:
+#line 1386 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st145;
+		case 32: goto st56;
+		case 71: goto tr72;
+		case 75: goto tr72;
+		case 77: goto tr72;
+		case 103: goto tr72;
+		case 107: goto tr72;
+		case 109: goto tr72;
+	}
+	if ( 9 <= (*p) && (*p) <= 13 )
+		goto st56;
+	goto st1;
+tr170:
+#line 135 "src/smaps_analyze.rl"
+	{
+				afrom = NULL;
+				ato = NULL;
+				address = 0;
+				pval = 0;
+			}
+	goto st145;
+st145:
+	if ( ++p == pe )
+		goto _test_eof145;
+case 145:
+#line 1413 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto tr170;
+		case 32: goto tr169;
+		case 71: goto tr171;
+		case 75: goto tr171;
+		case 77: goto tr171;
+		case 80: goto tr152;
+		case 83: goto tr153;
+		case 103: goto tr171;
+		case 107: goto tr171;
+		case 109: goto tr171;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto tr169;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr151;
+		} else if ( (*p) >= 65 )
+			goto tr151;
+	} else
+		goto tr151;
+	goto tr149;
+tr72:
+#line 159 "src/smaps_analyze.rl"
+	{
+				switch((*p)) {
+					case 'g':
+					case 'G':
+						pval *= 1024;
+					case 'm':
+					case 'M':
+						pval *= 1024;
+					case 'k':
+					case 'K':
+						pval *= 1024;
+						break;
+					default:
+						pval = 0;
+				}
+
+			}
+	goto st57;
+tr171:
+#line 159 "src/smaps_analyze.rl"
+	{
+				switch((*p)) {
+					case 'g':
+					case 'G':
+						pval *= 1024;
+					case 'm':
+					case 'M':
+						pval *= 1024;
+					case 'k':
+					case 'K':
+						pval *= 1024;
+						break;
+					default:
+						pval = 0;
+				}
+
+			}
+#line 135 "src/smaps_analyze.rl"
+	{
+				afrom = NULL;
+				ato = NULL;
+				address = 0;
+				pval = 0;
+			}
+	goto st57;
+tr174:
+#line 135 "src/smaps_analyze.rl"
+	{
+				afrom = NULL;
+				ato = NULL;
+				address = 0;
+				pval = 0;
+			}
+#line 159 "src/smaps_analyze.rl"
+	{
+				switch((*p)) {
+					case 'g':
+					case 'G':
+						pval *= 1024;
+					case 'm':
+					case 'M':
+						pval *= 1024;
+					case 'k':
+					case 'K':
+						pval *= 1024;
+						break;
+					default:
+						pval = 0;
+				}
+
+			}
+	goto st57;
+st57:
+	if ( ++p == pe )
+		goto _test_eof57;
+case 57:
+#line 1516 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 66: goto st58;
+		case 98: goto st58;
+	}
+	goto st1;
+st58:
+	if ( ++p == pe )
+		goto _test_eof58;
+case 58:
+	if ( (*p) == 10 )
+		goto tr74;
+	goto st1;
+tr71:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st59;
+st59:
+	if ( ++p == pe )
+		goto _test_eof59;
+case 59:
+#line 1554 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st145;
+		case 32: goto st56;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st56;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr76;
+		} else if ( (*p) >= 65 )
+			goto tr76;
+	} else
+		goto tr75;
+	goto st1;
+tr75:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st60;
+st60:
+	if ( ++p == pe )
+		goto _test_eof60;
+case 60:
+#line 1596 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st145;
+		case 32: goto st56;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st56;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr78;
+		} else if ( (*p) >= 65 )
+			goto tr78;
+	} else
+		goto tr77;
+	goto st1;
+tr77:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st61;
+st61:
+	if ( ++p == pe )
+		goto _test_eof61;
+case 61:
+#line 1638 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st145;
+		case 32: goto st56;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st56;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr80;
+		} else if ( (*p) >= 65 )
+			goto tr80;
+	} else
+		goto tr79;
+	goto st1;
+tr79:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st62;
+st62:
+	if ( ++p == pe )
+		goto _test_eof62;
+case 62:
+#line 1680 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st145;
+		case 32: goto st56;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st56;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr82;
+		} else if ( (*p) >= 65 )
+			goto tr82;
+	} else
+		goto tr81;
+	goto st1;
+tr81:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st63;
+st63:
+	if ( ++p == pe )
+		goto _test_eof63;
+case 63:
+#line 1722 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st145;
+		case 32: goto st56;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st56;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr84;
+		} else if ( (*p) >= 65 )
+			goto tr84;
+	} else
+		goto tr83;
+	goto st1;
+tr83:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st64;
+st64:
+	if ( ++p == pe )
+		goto _test_eof64;
+case 64:
+#line 1764 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st145;
+		case 32: goto st56;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st56;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr86;
+		} else if ( (*p) >= 65 )
+			goto tr86;
+	} else
+		goto tr85;
+	goto st1;
+tr85:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st65;
+st65:
+	if ( ++p == pe )
+		goto _test_eof65;
+case 65:
+#line 1806 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st145;
+		case 32: goto st56;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st56;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr88;
+		} else if ( (*p) >= 65 )
+			goto tr88;
+	} else
+		goto tr87;
+	goto st1;
+tr87:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st66;
+st66:
+	if ( ++p == pe )
+		goto _test_eof66;
+case 66:
+#line 1848 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st145;
+		case 32: goto st56;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st56;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr90;
+		} else if ( (*p) >= 65 )
+			goto tr90;
+	} else
+		goto tr89;
+	goto st1;
+tr89:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st67;
+st67:
+	if ( ++p == pe )
+		goto _test_eof67;
+case 67:
+#line 1890 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st145;
+		case 32: goto st56;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st56;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr92;
+		} else if ( (*p) >= 65 )
+			goto tr92;
+	} else
+		goto tr91;
+	goto st1;
+tr91:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st68;
+st68:
+	if ( ++p == pe )
+		goto _test_eof68;
+case 68:
+#line 1932 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st145;
+		case 32: goto st56;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st56;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr94;
+		} else if ( (*p) >= 65 )
+			goto tr94;
+	} else
+		goto tr93;
+	goto st1;
+tr93:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st69;
+st69:
+	if ( ++p == pe )
+		goto _test_eof69;
+case 69:
+#line 1974 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st145;
+		case 32: goto st56;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st56;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr96;
+		} else if ( (*p) >= 65 )
+			goto tr96;
+	} else
+		goto tr95;
+	goto st1;
+tr95:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st70;
+st70:
+	if ( ++p == pe )
+		goto _test_eof70;
+case 70:
+#line 2016 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st145;
+		case 32: goto st56;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st56;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr98;
+		} else if ( (*p) >= 65 )
+			goto tr98;
+	} else
+		goto tr97;
+	goto st1;
+tr97:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st71;
+st71:
+	if ( ++p == pe )
+		goto _test_eof71;
+case 71:
+#line 2058 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st145;
+		case 32: goto st56;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st56;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr100;
+		} else if ( (*p) >= 65 )
+			goto tr100;
+	} else
+		goto tr99;
+	goto st1;
+tr99:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st72;
+st72:
+	if ( ++p == pe )
+		goto _test_eof72;
+case 72:
+#line 2100 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st145;
+		case 32: goto st56;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st56;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr102;
+		} else if ( (*p) >= 65 )
+			goto tr102;
+	} else
+		goto tr101;
+	goto st1;
+tr101:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st73;
+st73:
+	if ( ++p == pe )
+		goto _test_eof73;
+case 73:
+#line 2142 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st145;
+		case 32: goto st56;
+		case 45: goto tr5;
+	}
+	if ( (*p) > 13 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr68;
+	} else if ( (*p) >= 9 )
+		goto st56;
+	goto st1;
+tr68:
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st74;
+st74:
+	if ( ++p == pe )
+		goto _test_eof74;
+case 74:
+#line 2165 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st145;
+		case 32: goto st56;
+	}
+	if ( (*p) > 13 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr68;
+	} else if ( (*p) >= 9 )
+		goto st56;
+	goto st1;
+tr102:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st75;
+st75:
+	if ( ++p == pe )
+		goto _test_eof75;
+case 75:
+#line 2195 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 45: goto tr5;
+	}
+	goto st1;
+tr100:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st76;
+st76:
+	if ( ++p == pe )
+		goto _test_eof76;
+case 76:
+#line 2220 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 65 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr102;
+	} else if ( (*p) > 70 ) {
+		if ( 97 <= (*p) && (*p) <= 102 )
+			goto tr102;
+	} else
+		goto tr102;
+	goto st1;
+tr98:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st77;
+st77:
+	if ( ++p == pe )
+		goto _test_eof77;
+case 77:
+#line 2253 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 65 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr100;
+	} else if ( (*p) > 70 ) {
+		if ( 97 <= (*p) && (*p) <= 102 )
+			goto tr100;
+	} else
+		goto tr100;
+	goto st1;
+tr96:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st78;
+st78:
+	if ( ++p == pe )
+		goto _test_eof78;
+case 78:
+#line 2286 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 65 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr98;
+	} else if ( (*p) > 70 ) {
+		if ( 97 <= (*p) && (*p) <= 102 )
+			goto tr98;
+	} else
+		goto tr98;
+	goto st1;
+tr94:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st79;
+st79:
+	if ( ++p == pe )
+		goto _test_eof79;
+case 79:
+#line 2319 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 65 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr96;
+	} else if ( (*p) > 70 ) {
+		if ( 97 <= (*p) && (*p) <= 102 )
+			goto tr96;
+	} else
+		goto tr96;
+	goto st1;
+tr92:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st80;
+st80:
+	if ( ++p == pe )
+		goto _test_eof80;
+case 80:
+#line 2352 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 65 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr94;
+	} else if ( (*p) > 70 ) {
+		if ( 97 <= (*p) && (*p) <= 102 )
+			goto tr94;
+	} else
+		goto tr94;
+	goto st1;
+tr90:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st81;
+st81:
+	if ( ++p == pe )
+		goto _test_eof81;
+case 81:
+#line 2385 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 65 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr92;
+	} else if ( (*p) > 70 ) {
+		if ( 97 <= (*p) && (*p) <= 102 )
+			goto tr92;
+	} else
+		goto tr92;
+	goto st1;
+tr88:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st82;
+st82:
+	if ( ++p == pe )
+		goto _test_eof82;
+case 82:
+#line 2418 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 65 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr90;
+	} else if ( (*p) > 70 ) {
+		if ( 97 <= (*p) && (*p) <= 102 )
+			goto tr90;
+	} else
+		goto tr90;
+	goto st1;
+tr86:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st83;
+st83:
+	if ( ++p == pe )
+		goto _test_eof83;
+case 83:
+#line 2451 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 65 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr88;
+	} else if ( (*p) > 70 ) {
+		if ( 97 <= (*p) && (*p) <= 102 )
+			goto tr88;
+	} else
+		goto tr88;
+	goto st1;
+tr84:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st84;
+st84:
+	if ( ++p == pe )
+		goto _test_eof84;
+case 84:
+#line 2484 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 65 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr86;
+	} else if ( (*p) > 70 ) {
+		if ( 97 <= (*p) && (*p) <= 102 )
+			goto tr86;
+	} else
+		goto tr86;
+	goto st1;
+tr82:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st85;
+st85:
+	if ( ++p == pe )
+		goto _test_eof85;
+case 85:
+#line 2517 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 65 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr84;
+	} else if ( (*p) > 70 ) {
+		if ( 97 <= (*p) && (*p) <= 102 )
+			goto tr84;
+	} else
+		goto tr84;
+	goto st1;
+tr80:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st86;
+st86:
+	if ( ++p == pe )
+		goto _test_eof86;
+case 86:
+#line 2550 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 65 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr82;
+	} else if ( (*p) > 70 ) {
+		if ( 97 <= (*p) && (*p) <= 102 )
+			goto tr82;
+	} else
+		goto tr82;
+	goto st1;
+tr78:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st87;
+st87:
+	if ( ++p == pe )
+		goto _test_eof87;
+case 87:
+#line 2583 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 65 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr80;
+	} else if ( (*p) > 70 ) {
+		if ( 97 <= (*p) && (*p) <= 102 )
+			goto tr80;
+	} else
+		goto tr80;
+	goto st1;
+tr76:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st88;
+st88:
+	if ( ++p == pe )
+		goto _test_eof88;
+case 88:
+#line 2616 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 65 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr78;
+	} else if ( (*p) > 70 ) {
+		if ( 97 <= (*p) && (*p) <= 102 )
+			goto tr78;
+	} else
+		goto tr78;
+	goto st1;
+tr6:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st89;
+st89:
+	if ( ++p == pe )
+		goto _test_eof89;
+case 89:
+#line 2649 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 65 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr76;
+	} else if ( (*p) > 70 ) {
+		if ( 97 <= (*p) && (*p) <= 102 )
+			goto tr76;
+	} else
+		goto tr76;
+	goto st1;
+tr39:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st90;
+st90:
+	if ( ++p == pe )
+		goto _test_eof90;
+case 90:
+#line 2687 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st143;
+		case 32: goto st26;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st26;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr76;
+		} else if ( (*p) >= 65 )
+			goto tr76;
+	} else
+		goto tr103;
+	goto st1;
+tr103:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st91;
+st91:
+	if ( ++p == pe )
+		goto _test_eof91;
+case 91:
+#line 2729 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st143;
+		case 32: goto st26;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st26;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr78;
+		} else if ( (*p) >= 65 )
+			goto tr78;
+	} else
+		goto tr104;
+	goto st1;
+tr104:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st92;
+st92:
+	if ( ++p == pe )
+		goto _test_eof92;
+case 92:
+#line 2771 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st143;
+		case 32: goto st26;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st26;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr80;
+		} else if ( (*p) >= 65 )
+			goto tr80;
+	} else
+		goto tr105;
+	goto st1;
+tr105:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st93;
+st93:
+	if ( ++p == pe )
+		goto _test_eof93;
+case 93:
+#line 2813 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st143;
+		case 32: goto st26;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st26;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr82;
+		} else if ( (*p) >= 65 )
+			goto tr82;
+	} else
+		goto tr106;
+	goto st1;
+tr106:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st94;
+st94:
+	if ( ++p == pe )
+		goto _test_eof94;
+case 94:
+#line 2855 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st143;
+		case 32: goto st26;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st26;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr84;
+		} else if ( (*p) >= 65 )
+			goto tr84;
+	} else
+		goto tr107;
+	goto st1;
+tr107:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st95;
+st95:
+	if ( ++p == pe )
+		goto _test_eof95;
+case 95:
+#line 2897 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st143;
+		case 32: goto st26;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st26;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr86;
+		} else if ( (*p) >= 65 )
+			goto tr86;
+	} else
+		goto tr108;
+	goto st1;
+tr108:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st96;
+st96:
+	if ( ++p == pe )
+		goto _test_eof96;
+case 96:
+#line 2939 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st143;
+		case 32: goto st26;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st26;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr88;
+		} else if ( (*p) >= 65 )
+			goto tr88;
+	} else
+		goto tr109;
+	goto st1;
+tr109:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st97;
+st97:
+	if ( ++p == pe )
+		goto _test_eof97;
+case 97:
+#line 2981 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st143;
+		case 32: goto st26;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st26;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr90;
+		} else if ( (*p) >= 65 )
+			goto tr90;
+	} else
+		goto tr110;
+	goto st1;
+tr110:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st98;
+st98:
+	if ( ++p == pe )
+		goto _test_eof98;
+case 98:
+#line 3023 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st143;
+		case 32: goto st26;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st26;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr92;
+		} else if ( (*p) >= 65 )
+			goto tr92;
+	} else
+		goto tr111;
+	goto st1;
+tr111:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st99;
+st99:
+	if ( ++p == pe )
+		goto _test_eof99;
+case 99:
+#line 3065 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st143;
+		case 32: goto st26;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st26;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr94;
+		} else if ( (*p) >= 65 )
+			goto tr94;
+	} else
+		goto tr112;
+	goto st1;
+tr112:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st100;
+st100:
+	if ( ++p == pe )
+		goto _test_eof100;
+case 100:
+#line 3107 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st143;
+		case 32: goto st26;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st26;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr96;
+		} else if ( (*p) >= 65 )
+			goto tr96;
+	} else
+		goto tr113;
+	goto st1;
+tr113:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st101;
+st101:
+	if ( ++p == pe )
+		goto _test_eof101;
+case 101:
+#line 3149 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st143;
+		case 32: goto st26;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st26;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr98;
+		} else if ( (*p) >= 65 )
+			goto tr98;
+	} else
+		goto tr114;
+	goto st1;
+tr114:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st102;
+st102:
+	if ( ++p == pe )
+		goto _test_eof102;
+case 102:
+#line 3191 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st143;
+		case 32: goto st26;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st26;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr100;
+		} else if ( (*p) >= 65 )
+			goto tr100;
+	} else
+		goto tr115;
+	goto st1;
+tr115:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st103;
+st103:
+	if ( ++p == pe )
+		goto _test_eof103;
+case 103:
+#line 3233 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st143;
+		case 32: goto st26;
+		case 45: goto tr5;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto st26;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr102;
+		} else if ( (*p) >= 65 )
+			goto tr102;
+	} else
+		goto tr116;
+	goto st1;
+tr116:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st104;
+st104:
+	if ( ++p == pe )
+		goto _test_eof104;
+case 104:
+#line 3275 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st143;
+		case 32: goto st26;
+		case 45: goto tr5;
+	}
+	if ( (*p) > 13 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr36;
+	} else if ( (*p) >= 9 )
+		goto st26;
+	goto st1;
+tr36:
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st105;
+st105:
+	if ( ++p == pe )
+		goto _test_eof105;
+case 105:
+#line 3298 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st143;
+		case 32: goto st26;
+	}
+	if ( (*p) > 13 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr36;
+	} else if ( (*p) >= 9 )
+		goto st26;
+	goto st1;
+tr33:
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st106;
+st106:
+	if ( ++p == pe )
+		goto _test_eof106;
+case 106:
+#line 3320 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st146;
+		case 32: goto st107;
+	}
+	if ( (*p) > 13 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr33;
+	} else if ( (*p) >= 9 )
+		goto st107;
+	goto st1;
+st107:
+	if ( ++p == pe )
+		goto _test_eof107;
+case 107:
+	switch( (*p) ) {
+		case 10: goto st146;
+		case 32: goto st107;
+		case 71: goto tr40;
+		case 75: goto tr40;
+		case 77: goto tr40;
+		case 103: goto tr40;
+		case 107: goto tr40;
+		case 109: goto tr40;
+	}
+	if ( 9 <= (*p) && (*p) <= 13 )
+		goto st107;
+	goto st1;
+st146:
+	if ( ++p == pe )
+		goto _test_eof146;
+case 146:
+	switch( (*p) ) {
+		case 10: goto tr164;
+		case 32: goto tr163;
+		case 71: goto tr172;
+		case 75: goto tr172;
+		case 77: goto tr172;
+		case 80: goto tr152;
+		case 83: goto tr153;
+		case 103: goto tr172;
+		case 107: goto tr172;
+		case 109: goto tr172;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto tr163;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr151;
+		} else if ( (*p) >= 65 )
+			goto tr151;
+	} else
+		goto tr151;
+	goto tr149;
+tr158:
+#line 135 "src/smaps_analyze.rl"
+	{
+				afrom = NULL;
+				ato = NULL;
+				address = 0;
+				pval = 0;
+			}
+	goto st108;
+st108:
+	if ( ++p == pe )
+		goto _test_eof108;
+case 108:
+#line 3389 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 104: goto st109;
+	}
+	goto st1;
+st109:
+	if ( ++p == pe )
+		goto _test_eof109;
+case 109:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 97: goto st110;
+	}
+	goto st1;
+st110:
+	if ( ++p == pe )
+		goto _test_eof110;
+case 110:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 114: goto st111;
+	}
+	goto st1;
+st111:
+	if ( ++p == pe )
+		goto _test_eof111;
+case 111:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 101: goto st112;
+	}
+	goto st1;
+st112:
+	if ( ++p == pe )
+		goto _test_eof112;
+case 112:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 100: goto st113;
+	}
+	goto st1;
+st113:
+	if ( ++p == pe )
+		goto _test_eof113;
+case 113:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 95: goto st114;
+	}
+	goto st1;
+st114:
+	if ( ++p == pe )
+		goto _test_eof114;
+case 114:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 68: goto st115;
+	}
+	goto st1;
+st115:
+	if ( ++p == pe )
+		goto _test_eof115;
+case 115:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 105: goto st116;
+	}
+	goto st1;
+st116:
+	if ( ++p == pe )
+		goto _test_eof116;
+case 116:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 114: goto st117;
+	}
+	goto st1;
+st117:
+	if ( ++p == pe )
+		goto _test_eof117;
+case 117:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 116: goto st118;
+	}
+	goto st1;
+st118:
+	if ( ++p == pe )
+		goto _test_eof118;
+case 118:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 121: goto st119;
+	}
+	goto st1;
+st119:
+	if ( ++p == pe )
+		goto _test_eof119;
+case 119:
+	switch( (*p) ) {
+		case 10: goto st138;
+		case 58: goto st120;
+	}
+	goto st1;
+st120:
+	if ( ++p == pe )
+		goto _test_eof120;
+case 120:
+	switch( (*p) ) {
+		case 10: goto st147;
+		case 32: goto st120;
+	}
+	if ( (*p) > 13 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr132;
+	} else if ( (*p) >= 9 )
+		goto st120;
+	goto st1;
+st147:
+	if ( ++p == pe )
+		goto _test_eof147;
+case 147:
+	switch( (*p) ) {
+		case 10: goto tr167;
+		case 32: goto tr166;
+		case 80: goto tr152;
+		case 83: goto tr153;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto tr166;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr151;
+		} else if ( (*p) >= 65 )
+			goto tr151;
+	} else
+		goto tr173;
+	goto tr149;
+tr132:
+#line 154 "src/smaps_analyze.rl"
+	{
+				pval *= 10;
+				pval += (*p) - '0';
+			}
+	goto st121;
+st121:
+	if ( ++p == pe )
+		goto _test_eof121;
+case 121:
+#line 3541 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto st148;
+		case 32: goto st122;
+	}
+	if ( (*p) > 13 ) {
+		if ( 48 <= (*p) && (*p) <= 57 )
+			goto tr132;
+	} else if ( (*p) >= 9 )
+		goto st122;
+	goto st1;
+st122:
+	if ( ++p == pe )
+		goto _test_eof122;
+case 122:
+	switch( (*p) ) {
+		case 10: goto st148;
+		case 32: goto st122;
+		case 71: goto tr72;
+		case 75: goto tr72;
+		case 77: goto tr72;
+		case 103: goto tr72;
+		case 107: goto tr72;
+		case 109: goto tr72;
+	}
+	if ( 9 <= (*p) && (*p) <= 13 )
+		goto st122;
+	goto st1;
+st148:
+	if ( ++p == pe )
+		goto _test_eof148;
+case 148:
+	switch( (*p) ) {
+		case 10: goto tr170;
+		case 32: goto tr169;
+		case 71: goto tr174;
+		case 75: goto tr174;
+		case 77: goto tr174;
+		case 80: goto tr152;
+		case 83: goto tr153;
+		case 103: goto tr174;
+		case 107: goto tr174;
+		case 109: goto tr174;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto tr169;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr151;
+		} else if ( (*p) >= 65 )
+			goto tr151;
+	} else
+		goto tr151;
+	goto tr149;
+tr10:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st123;
+st123:
+	if ( ++p == pe )
+		goto _test_eof123;
+case 123:
+#line 3616 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto tr9;
+		case 32: goto tr8;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto tr8;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr135;
+		} else if ( (*p) >= 65 )
+			goto tr135;
+	} else
+		goto tr135;
+	goto st1;
+tr135:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st124;
+st124:
+	if ( ++p == pe )
+		goto _test_eof124;
+case 124:
+#line 3652 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto tr9;
+		case 32: goto tr8;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto tr8;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr136;
+		} else if ( (*p) >= 65 )
+			goto tr136;
+	} else
+		goto tr136;
+	goto st1;
+tr136:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st125;
+st125:
+	if ( ++p == pe )
+		goto _test_eof125;
+case 125:
+#line 3688 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto tr9;
+		case 32: goto tr8;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto tr8;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr137;
+		} else if ( (*p) >= 65 )
+			goto tr137;
+	} else
+		goto tr137;
+	goto st1;
+tr137:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st126;
+st126:
+	if ( ++p == pe )
+		goto _test_eof126;
+case 126:
+#line 3724 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto tr9;
+		case 32: goto tr8;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto tr8;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr138;
+		} else if ( (*p) >= 65 )
+			goto tr138;
+	} else
+		goto tr138;
+	goto st1;
+tr138:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st127;
+st127:
+	if ( ++p == pe )
+		goto _test_eof127;
+case 127:
+#line 3760 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto tr9;
+		case 32: goto tr8;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto tr8;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr139;
+		} else if ( (*p) >= 65 )
+			goto tr139;
+	} else
+		goto tr139;
+	goto st1;
+tr139:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st128;
+st128:
+	if ( ++p == pe )
+		goto _test_eof128;
+case 128:
+#line 3796 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto tr9;
+		case 32: goto tr8;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto tr8;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr140;
+		} else if ( (*p) >= 65 )
+			goto tr140;
+	} else
+		goto tr140;
+	goto st1;
+tr140:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st129;
+st129:
+	if ( ++p == pe )
+		goto _test_eof129;
+case 129:
+#line 3832 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto tr9;
+		case 32: goto tr8;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto tr8;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr141;
+		} else if ( (*p) >= 65 )
+			goto tr141;
+	} else
+		goto tr141;
+	goto st1;
+tr141:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st130;
+st130:
+	if ( ++p == pe )
+		goto _test_eof130;
+case 130:
+#line 3868 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto tr9;
+		case 32: goto tr8;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto tr8;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr142;
+		} else if ( (*p) >= 65 )
+			goto tr142;
+	} else
+		goto tr142;
+	goto st1;
+tr142:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st131;
+st131:
+	if ( ++p == pe )
+		goto _test_eof131;
+case 131:
+#line 3904 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto tr9;
+		case 32: goto tr8;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto tr8;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr143;
+		} else if ( (*p) >= 65 )
+			goto tr143;
+	} else
+		goto tr143;
+	goto st1;
+tr143:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st132;
+st132:
+	if ( ++p == pe )
+		goto _test_eof132;
+case 132:
+#line 3940 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto tr9;
+		case 32: goto tr8;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto tr8;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr144;
+		} else if ( (*p) >= 65 )
+			goto tr144;
+	} else
+		goto tr144;
+	goto st1;
+tr144:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st133;
+st133:
+	if ( ++p == pe )
+		goto _test_eof133;
+case 133:
+#line 3976 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto tr9;
+		case 32: goto tr8;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto tr8;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr145;
+		} else if ( (*p) >= 65 )
+			goto tr145;
+	} else
+		goto tr145;
+	goto st1;
+tr145:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st134;
+st134:
+	if ( ++p == pe )
+		goto _test_eof134;
+case 134:
+#line 4012 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto tr9;
+		case 32: goto tr8;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto tr8;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr146;
+		} else if ( (*p) >= 65 )
+			goto tr146;
+	} else
+		goto tr146;
+	goto st1;
+tr146:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st135;
+st135:
+	if ( ++p == pe )
+		goto _test_eof135;
+case 135:
+#line 4048 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto tr9;
+		case 32: goto tr8;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto tr8;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr147;
+		} else if ( (*p) >= 65 )
+			goto tr147;
+	} else
+		goto tr147;
+	goto st1;
+tr147:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st136;
+st136:
+	if ( ++p == pe )
+		goto _test_eof136;
+case 136:
+#line 4084 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto tr9;
+		case 32: goto tr8;
+	}
+	if ( (*p) < 48 ) {
+		if ( 9 <= (*p) && (*p) <= 13 )
+			goto tr8;
+	} else if ( (*p) > 57 ) {
+		if ( (*p) > 70 ) {
+			if ( 97 <= (*p) && (*p) <= 102 )
+				goto tr148;
+		} else if ( (*p) >= 65 )
+			goto tr148;
+	} else
+		goto tr148;
+	goto st1;
+tr148:
+#line 141 "src/smaps_analyze.rl"
+	{
+				if ((*p) >= 'a' && (*p) <= 'f') {
+					address <<= 4;
+					address |= ((*p) - 'a' + 10) & 0x0F;
+				} else if ((*p) >= 'A' && (*p) <= 'F') {
+					address <<= 4;
+					address |= ((*p) - 'A' + 10) & 0x0F;
+				} else {
+					address <<= 4;
+					address |= ( (*p) - '0') & 0x0F;
+				}
+			}
+	goto st137;
+st137:
+	if ( ++p == pe )
+		goto _test_eof137;
+case 137:
+#line 4120 "src/smaps_analyze.m"
+	switch( (*p) ) {
+		case 10: goto tr9;
+		case 32: goto tr8;
+	}
+	if ( 9 <= (*p) && (*p) <= 13 )
+		goto tr8;
 	goto st1;
 	}
 	_test_eof1: cs = 1; goto _test_eof; 
-	_test_eof40: cs = 40; goto _test_eof; 
+	_test_eof138: cs = 138; goto _test_eof; 
 	_test_eof2: cs = 2; goto _test_eof; 
 	_test_eof3: cs = 3; goto _test_eof; 
 	_test_eof4: cs = 4; goto _test_eof; 
 	_test_eof5: cs = 5; goto _test_eof; 
-	_test_eof41: cs = 41; goto _test_eof; 
+	_test_eof139: cs = 139; goto _test_eof; 
 	_test_eof6: cs = 6; goto _test_eof; 
 	_test_eof7: cs = 7; goto _test_eof; 
 	_test_eof8: cs = 8; goto _test_eof; 
 	_test_eof9: cs = 9; goto _test_eof; 
+	_test_eof140: cs = 140; goto _test_eof; 
 	_test_eof10: cs = 10; goto _test_eof; 
 	_test_eof11: cs = 11; goto _test_eof; 
 	_test_eof12: cs = 12; goto _test_eof; 
@@ -1494,9 +4151,12 @@ case 39:
 	_test_eof21: cs = 21; goto _test_eof; 
 	_test_eof22: cs = 22; goto _test_eof; 
 	_test_eof23: cs = 23; goto _test_eof; 
+	_test_eof141: cs = 141; goto _test_eof; 
 	_test_eof24: cs = 24; goto _test_eof; 
+	_test_eof142: cs = 142; goto _test_eof; 
 	_test_eof25: cs = 25; goto _test_eof; 
 	_test_eof26: cs = 26; goto _test_eof; 
+	_test_eof143: cs = 143; goto _test_eof; 
 	_test_eof27: cs = 27; goto _test_eof; 
 	_test_eof28: cs = 28; goto _test_eof; 
 	_test_eof29: cs = 29; goto _test_eof; 
@@ -1510,34 +4170,151 @@ case 39:
 	_test_eof37: cs = 37; goto _test_eof; 
 	_test_eof38: cs = 38; goto _test_eof; 
 	_test_eof39: cs = 39; goto _test_eof; 
+	_test_eof40: cs = 40; goto _test_eof; 
+	_test_eof41: cs = 41; goto _test_eof; 
+	_test_eof42: cs = 42; goto _test_eof; 
+	_test_eof43: cs = 43; goto _test_eof; 
+	_test_eof44: cs = 44; goto _test_eof; 
+	_test_eof45: cs = 45; goto _test_eof; 
+	_test_eof46: cs = 46; goto _test_eof; 
+	_test_eof47: cs = 47; goto _test_eof; 
+	_test_eof48: cs = 48; goto _test_eof; 
+	_test_eof49: cs = 49; goto _test_eof; 
+	_test_eof50: cs = 50; goto _test_eof; 
+	_test_eof51: cs = 51; goto _test_eof; 
+	_test_eof52: cs = 52; goto _test_eof; 
+	_test_eof53: cs = 53; goto _test_eof; 
+	_test_eof54: cs = 54; goto _test_eof; 
+	_test_eof144: cs = 144; goto _test_eof; 
+	_test_eof55: cs = 55; goto _test_eof; 
+	_test_eof56: cs = 56; goto _test_eof; 
+	_test_eof145: cs = 145; goto _test_eof; 
+	_test_eof57: cs = 57; goto _test_eof; 
+	_test_eof58: cs = 58; goto _test_eof; 
+	_test_eof59: cs = 59; goto _test_eof; 
+	_test_eof60: cs = 60; goto _test_eof; 
+	_test_eof61: cs = 61; goto _test_eof; 
+	_test_eof62: cs = 62; goto _test_eof; 
+	_test_eof63: cs = 63; goto _test_eof; 
+	_test_eof64: cs = 64; goto _test_eof; 
+	_test_eof65: cs = 65; goto _test_eof; 
+	_test_eof66: cs = 66; goto _test_eof; 
+	_test_eof67: cs = 67; goto _test_eof; 
+	_test_eof68: cs = 68; goto _test_eof; 
+	_test_eof69: cs = 69; goto _test_eof; 
+	_test_eof70: cs = 70; goto _test_eof; 
+	_test_eof71: cs = 71; goto _test_eof; 
+	_test_eof72: cs = 72; goto _test_eof; 
+	_test_eof73: cs = 73; goto _test_eof; 
+	_test_eof74: cs = 74; goto _test_eof; 
+	_test_eof75: cs = 75; goto _test_eof; 
+	_test_eof76: cs = 76; goto _test_eof; 
+	_test_eof77: cs = 77; goto _test_eof; 
+	_test_eof78: cs = 78; goto _test_eof; 
+	_test_eof79: cs = 79; goto _test_eof; 
+	_test_eof80: cs = 80; goto _test_eof; 
+	_test_eof81: cs = 81; goto _test_eof; 
+	_test_eof82: cs = 82; goto _test_eof; 
+	_test_eof83: cs = 83; goto _test_eof; 
+	_test_eof84: cs = 84; goto _test_eof; 
+	_test_eof85: cs = 85; goto _test_eof; 
+	_test_eof86: cs = 86; goto _test_eof; 
+	_test_eof87: cs = 87; goto _test_eof; 
+	_test_eof88: cs = 88; goto _test_eof; 
+	_test_eof89: cs = 89; goto _test_eof; 
+	_test_eof90: cs = 90; goto _test_eof; 
+	_test_eof91: cs = 91; goto _test_eof; 
+	_test_eof92: cs = 92; goto _test_eof; 
+	_test_eof93: cs = 93; goto _test_eof; 
+	_test_eof94: cs = 94; goto _test_eof; 
+	_test_eof95: cs = 95; goto _test_eof; 
+	_test_eof96: cs = 96; goto _test_eof; 
+	_test_eof97: cs = 97; goto _test_eof; 
+	_test_eof98: cs = 98; goto _test_eof; 
+	_test_eof99: cs = 99; goto _test_eof; 
+	_test_eof100: cs = 100; goto _test_eof; 
+	_test_eof101: cs = 101; goto _test_eof; 
+	_test_eof102: cs = 102; goto _test_eof; 
+	_test_eof103: cs = 103; goto _test_eof; 
+	_test_eof104: cs = 104; goto _test_eof; 
+	_test_eof105: cs = 105; goto _test_eof; 
+	_test_eof106: cs = 106; goto _test_eof; 
+	_test_eof107: cs = 107; goto _test_eof; 
+	_test_eof146: cs = 146; goto _test_eof; 
+	_test_eof108: cs = 108; goto _test_eof; 
+	_test_eof109: cs = 109; goto _test_eof; 
+	_test_eof110: cs = 110; goto _test_eof; 
+	_test_eof111: cs = 111; goto _test_eof; 
+	_test_eof112: cs = 112; goto _test_eof; 
+	_test_eof113: cs = 113; goto _test_eof; 
+	_test_eof114: cs = 114; goto _test_eof; 
+	_test_eof115: cs = 115; goto _test_eof; 
+	_test_eof116: cs = 116; goto _test_eof; 
+	_test_eof117: cs = 117; goto _test_eof; 
+	_test_eof118: cs = 118; goto _test_eof; 
+	_test_eof119: cs = 119; goto _test_eof; 
+	_test_eof120: cs = 120; goto _test_eof; 
+	_test_eof147: cs = 147; goto _test_eof; 
+	_test_eof121: cs = 121; goto _test_eof; 
+	_test_eof122: cs = 122; goto _test_eof; 
+	_test_eof148: cs = 148; goto _test_eof; 
+	_test_eof123: cs = 123; goto _test_eof; 
+	_test_eof124: cs = 124; goto _test_eof; 
+	_test_eof125: cs = 125; goto _test_eof; 
+	_test_eof126: cs = 126; goto _test_eof; 
+	_test_eof127: cs = 127; goto _test_eof; 
+	_test_eof128: cs = 128; goto _test_eof; 
+	_test_eof129: cs = 129; goto _test_eof; 
+	_test_eof130: cs = 130; goto _test_eof; 
+	_test_eof131: cs = 131; goto _test_eof; 
+	_test_eof132: cs = 132; goto _test_eof; 
+	_test_eof133: cs = 133; goto _test_eof; 
+	_test_eof134: cs = 134; goto _test_eof; 
+	_test_eof135: cs = 135; goto _test_eof; 
+	_test_eof136: cs = 136; goto _test_eof; 
+	_test_eof137: cs = 137; goto _test_eof; 
 
 	_test_eof: {}
 	if ( p == eof )
 	{
 	switch ( cs ) {
-	case 40: 
-	case 41: 
-#line 102 "src/smaps_analyze.rl"
+	case 138: 
+	case 139: 
+	case 140: 
+	case 141: 
+	case 142: 
+	case 143: 
+	case 144: 
+	case 145: 
+	case 146: 
+	case 147: 
+	case 148: 
+#line 135 "src/smaps_analyze.rl"
 	{
 				afrom = NULL;
 				ato = NULL;
 				address = 0;
+				pval = 0;
 			}
 	break;
-#line 1528 "src/smaps_analyze.m"
+#line 4301 "src/smaps_analyze.m"
 	}
 	}
 
 	_out: {}
 	}
 
-#line 185 "src/smaps_analyze.rl"
+#line 286 "src/smaps_analyze.rl"
 
 	}
 
 	free(buf);
 }
 
+
+/**
+ * free memory
+ */
 void
 smaps_free(struct rlist *head)
 {
@@ -1549,4 +4326,42 @@ smaps_free(struct rlist *head)
 	}
 }
 
+/**
+ * compare two smaps (return size(smap_to - smap_from)) 
+ */
+size_t
+smaps_compare(struct rlist *smap_from, struct rlist *smap_to)
+{
+	if (rlist_empty(smap_from))
+		return 0;
+	if (rlist_empty(smap_to))
+		return 0;
+	struct smap_region *rf, *rt;
+
+
+	size_t res = 0;
+	rlist_foreach_entry(rt, smap_to, list) {
+		/* new regions */
+		size_t add_size = rt->to - rt->from;
+		rlist_foreach_entry(rf, smap_from, list) {
+			if(rf->from > rt->to || rf->to < rt->from)
+				continue;
+			add_size = 0;
+			break;
+		}
+		res += add_size;
+
+		/* overlapped regions */
+		rlist_foreach_entry(rf, smap_from, list) {
+			if (rf->from == rt->from && rf->to == rt->to) {
+				if (rt->private_dirty > rf->private_dirty) {
+					res += rt->private_dirty;
+					res -= rf->private_dirty;
+				}
+			}
+		}
+	}
+
+	return res;
+}
 /* vim: set ft=ragel : */

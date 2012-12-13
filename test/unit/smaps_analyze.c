@@ -24,6 +24,7 @@ main(void)
 	ok(!rlist_empty(&stat), "regions were found");
 
 	int pfound = 0, xfound = 0, rfound = 0, wfound = 0, wrong_fromto = 0;
+	int dfound = 0;
 	rlist_foreach_entry(region, &stat, list) {
 		if (region->flags & SMAP_REGION_R)
 			rfound++;
@@ -35,6 +36,10 @@ main(void)
 			pfound++;
 		if (region->to < region->from)
 			wrong_fromto++;
+		if (region->private_dirty)
+			dfound++;
+		if (region->shared_dirty)
+			dfound++;
 	}
 
 	ok(rfound, "read  flag");
@@ -44,8 +49,7 @@ main(void)
 	is(wrong_fromto, 0, "wrong regions");
 
 	smaps_free(&stat);
-
 	ok(rlist_empty(&stat), "list was cleanup");
-
+	smaps_free(&stat);
 	return check_plan();
 }
