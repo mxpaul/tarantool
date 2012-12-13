@@ -16,11 +16,9 @@ main(void)
 
 	int aok = access("/proc/self/smaps", R_OK) == 0;
 
-
-
-	ok(access("/proc/self/smaps", R_OK) == 0, "smaps found");
+	ok(access("/proc/self/smaps", R_OK) == 0, "smaps were found");
 	smaps_analyze(&stat);
-	isnt(stat.next, NULL, "head was init");
+	isnt(stat.next, NULL, "head was initialized");
 	ok(!rlist_empty(&stat), "regions were found");
 
 	int pfound = 0, xfound = 0, rfound = 0, wfound = 0, wrong_fromto = 0;
@@ -50,6 +48,5 @@ main(void)
 
 	smaps_free(&stat);
 	ok(rlist_empty(&stat), "list was cleanup");
-	smaps_free(&stat);
 	return check_plan();
 }

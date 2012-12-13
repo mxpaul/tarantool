@@ -1,3 +1,5 @@
+#ifndef INCLUDES_TARANTOOL_SMAPS_ANALYZE_H
+#define INCLUDES_TARANTOOL_SMAPS_ANALYZE_H
 /*
  * Redistribution and use in source and binary forms, with or
  * without modification, are permitted provided that the following
@@ -26,9 +28,6 @@
  * THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef INCLUDES_TARANTOOL_SMAPS_ANALYZE_H
-#define INCLUDES_TARANTOOL_SMAPS_ANALYZE_H
-
 #include <rlist.h>
 #include <stdlib.h>
 

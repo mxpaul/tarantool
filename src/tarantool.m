@@ -362,7 +362,7 @@ snapshot(void *ev, int events __attribute__((unused)))
 	snapshot_save(recovery_state, mod_snapshot);
 
 	smaps_analyze(&smaps_after_snapshot);
-	say_info("snapshot saved successfully, %zu bytes of RAM were used",
+	say_info("snapshot was saved successfully, %zu bytes of RAM were used",
 		smaps_compare(&smaps_before_snapshot, &smaps_after_snapshot));
 	smaps_free(&smaps_before_snapshot);
 	smaps_free(&smaps_after_snapshot);

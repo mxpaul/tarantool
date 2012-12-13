@@ -62,7 +62,7 @@ add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/src/admin.m
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/src/smaps_analyze.m
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     COMMAND ${RAGEL} -G2 src/smaps_analyze.rl -o src/smaps_analyze.m
-    DEPENDS ${CMAKE_SOURCE_DIR}/src/admin.rl)
+    DEPENDS ${CMAKE_SOURCE_DIR}/src/smaps_analyze.rl)
 
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/src/memcached-grammar.m
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
