@@ -48,6 +48,7 @@
 #include <admin.h>
 #include <replication.h>
 #include <fiber.h>
+#include <coeio.h>
 #include <iproto.h>
 #include <latch.h>
 #include <recovery.h>
@@ -603,6 +604,7 @@ tarantool_free(void)
 	destroy_tarantool_cfg(&cfg);
 
 	fiber_free();
+	coeio_free();
 	palloc_free();
 	ev_default_destroy();
 #ifdef ENABLE_GCOV
@@ -619,6 +621,7 @@ initialize(double slab_alloc_arena, int slab_alloc_minimal, double slab_alloc_fa
 	if (!salloc_init(slab_alloc_arena * (1 << 30), slab_alloc_minimal, slab_alloc_factor))
 		panic_syserror("can't initialize slab allocator");
 	fiber_init();
+	coeio_init();
 }
 
 static void
