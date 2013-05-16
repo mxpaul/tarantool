@@ -105,6 +105,7 @@ set (common_sources
      lua/lua_ipc.m
      lua/lua_socket.m
      lua/session.m
+     lua/xml.m
 )
 
 if (ENABLE_TRACE)
@@ -115,7 +116,7 @@ set_source_files_compile_flags(${common_sources})
 add_library(core STATIC ${common_sources})
 add_dependencies(core generate_headers)
 
-set (common_libraries cfg core)
+set (common_libraries ${common_libraries} cfg core)
 
 list(APPEND common_libraries
     ${LIBEV_LIBRARIES}

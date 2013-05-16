@@ -1,0 +1,12 @@
+# encoding: tarantool
+
+import os
+import sys
+import re
+
+
+cond = exec admin "lua box.xml.enabled"
+
+if not re.search(re.compile('true', re.M), cond):
+        self.skip = 1
+

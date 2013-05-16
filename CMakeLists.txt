@@ -240,6 +240,8 @@ else()
 endif()
 
 
+include(BuildLibXML)
+
 #
 # LibEV
 #

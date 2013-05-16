@@ -1,0 +1,140 @@
+lua type(box.xml)
+---
+ - table
+...
+lua xml = box.xml.load("<?xml version='1.0' encoding='utf-8'?><User>123<List><A>1</A><A id='abc'>2</A></List></User>")
+---
+...
+lua type(xml)
+---
+ - table
+...
+lua tostring(xml)
+---
+ - <User>123<List><A>1</A><A id="abc">2</A></List></User>
+...
+lua xml:xpath('//User/List')
+---
+ - <List><A>1</A><A id="abc">2</A></List>
+...
+lua xml:xpath('//User/List'):xpath('//A')
+---
+ - <A>1</A>
+ - <A id="abc">2</A>
+...
+lua xml:xpath('//User/List'):xpath('A')
+---
+ - <A>1</A>
+ - <A id="abc">2</A>
+...
+lua xml:xpath('User/List')
+---
+ - <List><A>1</A><A id="abc">2</A></List>
+...
+lua xml:xpath("//User/List/A[@id='abc']")
+---
+ - <A id="abc">2</A>
+...
+lua elm = box.xml.element('Test')
+---
+...
+lua elm
+---
+ - <Test/>
+...
+lua elm:attribute('abc')
+---
+ - nil
+...
+lua elm:attribute('abc', 'cde')
+---
+ - nil
+...
+lua elm
+---
+ - <Test abc="cde"/>
+...
+lua elm:attribute('abc', 'cde1')
+---
+ - cde
+...
+lua elm
+---
+ - <Test abc="cde1"/>
+...
+lua elm:attribute('abc1', 'a&b')
+---
+ - nil
+...
+lua elm
+---
+ - <Test abc="cde1" abc1="a&amp;b"/>
+...
+lua elm:attribute('abc1', nil)
+---
+ - a&b
+...
+lua elm
+---
+ - <Test abc="cde1"/>
+...
+lua elm:attribute('abc1', nil)
+---
+ - nil
+...
+lua elm
+---
+ - <Test abc="cde1"/>
+...
+lua xml:xpath("//User/List/A[@id='abc']"):parent()
+---
+ - <List><A>1</A><A id="abc">2</A></List>
+...
+lua xml:xpath("//User/List/A[@id='abc']"):parent():parent()
+---
+ - <User>123<List><A>1</A><A id="abc">2</A></List></User>
+...
+lua xml:xpath("//User/List/A[@id='abc']"):parent():parent():parent()
+---
+ - <User>123<List><A>1</A><A id="abc">2</A></List></User>
+...
+lua xml:xpath("//User/List/A[@id='abc']"):add_child(elm)
+---
+ - <Test abc="cde1"/>
+...
+lua xml
+---
+ - <User>123<List><A>1</A><A id="abc">2<Test abc="cde1"/></A></List></User>
+...
+lua xml:xpath("//User"):add_child(elm:clone())
+---
+ - <Test abc="cde1"/>
+...
+lua xml
+---
+ - <User>123<List><A>1</A><A id="abc">2<Test abc="cde1"/></A></List><Test abc="cde1"/></User>
+...
+lua elm:remove()
+---
+ - <Test abc="cde1"/>
+...
+lua xml
+---
+ - <User>123<List><A>1</A><A id="abc">2</A></List><Test abc="cde1"/></User>
+...
+lua elm:remove()
+---
+error: 'The node isn''t a child node'
+...
+lua xml:remove()
+---
+error: 'The node isn''t a child node'
+...
+lua xml:xpath('//User'):text('abc')
+---
+ - 12312abc
+...
+lua xml
+---
+ - <User>123<List><A>1</A><A id="abc">2</A></List><Test abc="cde1"/>abc</User>
+...
