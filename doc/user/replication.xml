@@ -13,7 +13,7 @@
   a degraded state.
 </para></blockquote>
 
-<section>
+<section xml:id="replication-architecture">
     <title>Replication architecture</title>
   <para>
     A replica gets all updates from the master by continuously
@@ -26,13 +26,15 @@
     on a single record.
   </para>
   <para>
-    A stored program invocation, unless requested explicitly,
+    A stored program invocation
+    <!-- , unless requested explicitly, -->
     does not enter the Write Ahead Log. Instead, log events
     for actual UPDATEs and DELETEs, performed by the Lua code,
     are written to the log. This ensures that possible
     non-determinism of Lua does not cause replication
     going out of sync.
   </para>
+<!--
   <para>
     It is still sometimes necessary to replicate stored program
     CALLs, rather than their effects: for example, when the
@@ -43,6 +45,7 @@
     flag of the binary protocol can  be used 
     to replicate CALLs as statements.
   </para>
+-->
   <para>
     For replication to work correctly, the latest LSN
     on the replica must match or fall behind the latest LSN
@@ -55,7 +58,7 @@
   </para>
 </section>
 
-<section>
+<section xml:id="setting-up-the-master">
   <title>Setting up the master</title>
   <para>
     To prepare the master for connections from replica, it's only
@@ -67,7 +70,7 @@
     has its own replication state.
   </para>
 </section>
-<section>
+<section xml:id="settin-up-a-replica">
   <title>Setting up a replica</title>
   <para>
     The server, master or replica, always requires a valid
@@ -102,13 +105,13 @@
   </simpara></note>
 
 </section>
-<section>
+<section xml:id="recovering-from-a-degraded-state">
   <title>Recovering from a degraded state</title>
   <para>
     "Degraded state" is a situation when the master becomes
     unavailable -- either due to hardware or network failure, or a
     programming bug. There is no reliable way for a replica to detect
-    that the master is gone for all, since sources of failure and
+    that the master is gone for good, since sources of failure and
     replication environments vary significantly.
   </para>
   <para>

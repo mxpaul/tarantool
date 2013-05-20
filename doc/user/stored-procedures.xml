@@ -16,7 +16,9 @@
         server-side procedure written in Lua can select and modify
         data, access configuration and perform administrative
         tasks. It is possible to dynamically define, invoke,
-        alter and drop Lua procedures.
+        alter and drop Lua procedures. Lua procedures can run
+        in the background and perform administrative tasks,
+        such as data expiration or re-sharding.
 
     </para>
     <para>
@@ -42,9 +44,11 @@ Found 1 tuple:
 </programlisting>
     In the language of the administrative console
     <olink targetptr="lua-command" /> evaluates an arbitrary
-    Lua chunk. CALL is the SQL standard statement used
-    to invoke the CALL command of the binary
-    protocol.
+    Lua chunk. CALL is the SQL standard statement, so its syntax
+    was adopted by Tarantool command line client 
+    to invoke the CALL command of the binary protocol.
+</para>
+<para>
     In the example above, a Lua procedure is first defined
     using the text protocol of the administrative port,
     and then invoked using the Tarantool client-side SQL
@@ -105,8 +109,23 @@ expirationd.run_task("exprd space 0", 0, is_expired, purge,
                     { field_no = 1, ttl = 30 * 60 })
 ]]>
     </programlisting>
+ </para>
+ <para>
+    The initialization script can select and modify data. However,
+    if the server is a running replica, data change requests from
+    the start script fail just the same way they would fail if
+    were sent from a remote client.
   </para>
-
+ <para>
+   Another common task to perform in the initialization script
+   is to start background fibers for data expiration, re-sharding,
+   or communication with networked peers.
+ </para>
+ <para>
+   Finally, the script can be used to define Lua <olink
+   targetptr="triggers">triggers</olink> invoked on various events
+   within the system.
+ </para>
   <para>
     There is a single global instance of the Lua interpreter, which is
     shared across all connections. Anything prefixed with
@@ -122,12 +141,11 @@ expirationd.run_task("exprd space 0", 0, is_expired, purge,
     &mdash; set of local variables and definitions.
   </para>
   <para>
-    The interpreter environment is not restricted when
+     The interpreter environment is not restricted when
      <olink targetptr="init.lua"/> is loaded. But before the
      server starts accepting requests, the standard Lua APIs, such
      as for file I/O, process control and module management are
-     unset, to avoid possible trivial security attacks, and
-     Tarantool-specific libraries are loaded.
+     unset, to avoid possible trivial security attacks.
   </para>
   <para>
     In the binary protocol, it's only possible to <emphasis
@@ -187,6 +205,9 @@ Call OK, 2 rows affected
 localhost> call box.space[0]:truncate()
 error: 1:15 expected '('
 </computeroutput></programlisting>
+    Since it's impossible to invoke object methods from the binary
+    protocol, the object-oriented syntax is often used to restrict
+    certain operations to be used by a system administrator only.
   </para>
   <para>
     Every value, returned from a stored function by means of
@@ -253,7 +274,7 @@ pack: function
             libraries, such as <code>cfg, space, fiber, index, tuple</code>,
             to access server configuration, create, resume and
             interrupt fibers, inspect contents of spaces, indexes
-            and tuples.
+            and tuples, send and receive data over network.
         </para></listitem>
     </itemizedlist>
   </para>
@@ -340,6 +361,16 @@ localhost> lua type(i), type(i*2),  type(i/2), i, i*2, i/2
                 Any server error produced by the executed
                 command.
             </para>
+            <para>
+                Please note, that since all requests from Lua
+                enter the core through <emphasis
+                role="lua">box.process()</emphasis>, all checks
+                and triggers run by the core automatically apply.
+                For example, if the server is in read-only mode,
+                an update or delete fails. Analogously, if a
+                system-wide "instead of" trigger is defined, it
+                is run.
+            </para>
         </listitem>
     </varlistentry>
 
@@ -351,7 +382,7 @@ localhost> lua type(i), type(i*2),  type(i/2), i, i*2, i/2
         </term>
         <listitem>
             <para>
-                Search for tuple in the given space. A
+                Search for a tuple or tuples in the given space. A
                 wrapper around <code>box.process()</code>.
                 <bridgehead renderas="sect4">Parameters</bridgehead>
                 <simplelist>
@@ -395,6 +426,25 @@ localhost> lua box.select(5, 1, 'firstname', 'lastname')
         </term>
         <listitem><simpara></simpara></listitem>
     </varlistentry>
+
+    <varlistentry>
+        <term>
+            <emphasis role="lua" xml:id="box.select_limit" xreflabel="box.select_limit">
+                box.select(space_no, index_no, offset, limit, ...)
+            </emphasis>
+        </term>
+        <listitem>
+            <para>
+                Search for tuples in the given space. This is a
+                full version of the built-in SELECT command, in
+                which one can specify offset and limit in a
+                multi-tuple return.  The server may return
+                multiple tuples when the index is non-unique or a
+                partial key is used for search.
+            </para>
+        </listitem>
+    </varlistentry>
+
 
     <varlistentry>
         <term>
@@ -529,6 +579,7 @@ Call ERROR, Illegal parameters, key is not u32 (ER_ILLEGAL_PARAMS)
             If <code>key</code> is <code>nil</code> or unspecified,
             the selection starts from the start of the index.
             This is a simple wrapper around <code xlink:href="#box.space.select_range">box.space[space_no]:select_range(index_no, ...)</code>.
+            BITSET index does not support this call.
         </para>
         <para>
             <bridgehead renderas="sect4">Example</bridgehead>
@@ -598,7 +649,7 @@ localhost> lua box.select_range(4, 1, 2, '1')
             </para>
             <para>
             For TREE indexes, this returns tuples in sorted order.
-            Reverse iteration for HASH indexes is not supported.
+            Other index types do not support this call.
             If <code>key</code> is <code>nil</code> or unspecified,
             the selection starts from the end of the index.
             <bridgehead renderas="sect4">Example</bridgehead>
@@ -798,7 +849,7 @@ Note: the administrative console output must be YAML-compatible.
         </term>
         <listitem>
             <para>
-                Evaluates an arbitrary chunk of lua code passed in
+                Evaluates an arbitrary chunk of Lua code passed in
                 <code>s</code>. If there is a compilation error,
                 it's raised as a Lua error. In case of compilation
                 success, all arguments which follow <code>s</code>
@@ -1091,13 +1142,13 @@ localhost> lua t:find(1, 'abc')
     <varlistentry>
         <term><emphasis role="lua">box.tuple.new(...)</emphasis></term>
         <listitem><para>
-        Construct a new tuple from a Lua table or a scalar. 
+        Construct a new tuple from a Lua table or a scalar.
         </para>
             <bridgehead renderas="sect4">Example</bridgehead>
             <programlisting>localhost> lua box.tuple.new({tonumber64('18446744073709551615'), 'string', 1})
---- 
+---
  - 18446744073709551615: {'string', 1}
-... 
+...
 </programlisting>
         </listitem>
     </varlistentry>
@@ -1192,8 +1243,9 @@ localhost> lua t:find(1, 'abc')
             <simpara>
                 Select a reverse range of tuples, limited by
                 <code>limit</code>, starting from <code>key</code>.
-                The key can be multipart. TREE index returns tuples in descending
-                order. Not supported by HASH indexes.
+                The key can be multipart. TREE index returns
+                tuples in descending order. Other index types
+                do not support this call.
             </simpara>
         </listitem>
     </varlistentry>
@@ -1285,7 +1337,9 @@ localhost> lua for k,v in box.space[0]:pairs() do print(v) end
         Indexes are contained in <code
         xlink:href="#box.space">box.space[i].index[]</code> array
         within each space object. They provide an API for
-        ordered iteration over tuples.
+        ordered iteration over tuples. This API is a direct
+        binding to corresponding methods of index objects in the
+        storage engine.
     </para>
     <varlistentry>
         <term><emphasis role="lua">index.unique</emphasis></term>
@@ -1299,7 +1353,7 @@ localhost> lua for k,v in box.space[0]:pairs() do print(v) end
             <emphasis role="lua">index.type</emphasis>
         </term>
         <listitem><simpara>
-            A string for index type, either 'TREE' or 'HASH'.
+            A string for index type, either 'TREE', 'HASH', 'BITSET'.
         </simpara></listitem>
     </varlistentry>
 
@@ -1323,7 +1377,7 @@ localhost> lua for k,v in box.space[0]:pairs() do print(v) end
 
     <varlistentry>
         <term>
-             <emphasis role="lua" xml:id="box.index.iterator" xreflabel="box.index.iterator">
+             <emphasis role="lua" xml:id="box.index.iterator" xreflabel="box.index.iterator(type, ...)">
             index:iterator(type, ...)</emphasis>
         </term>
         <listitem>
@@ -1336,13 +1390,30 @@ localhost> lua for k,v in box.space[0]:pairs() do print(v) end
                 and depend on the iteration type. For example,
                 TREE index maintains a strict order of keys and
                 can return all tuples in ascending or descending
-                order, starting from the specified key. A HASH
-                index, however, doesn't support ordering.
+                order, starting from the specified key. Other
+                index types, however, do not support ordering.
             </simpara>
+            <para xml:id="iterator-consistency">
+                To understand consistency of tuples,
+                returned by an iterator, it's essential to know
+                the principles of the Tarantool transaction processing
+                subsystem.
+                An iterator in Tarantool does not own a consistent
+                read view. Instead, each procedure is granted exclusive
+                access to all tuples and spaces until it
+                encounters a "context switch": caused a write to
+                disk, network, or by an explicit call to <emphasis
+                role="lua" xlink:href="box.fiber.yield">box.fiber.yield()</emphasis>.
+                When the execution flow returns to the yielded
+                procedure, the data set could have changed significantly.
+                Iteration, resumed after a yield point, does not
+                preserve the read view, but continues with the new
+                content of the database.
+            </para>
             <para>
                 <bridgehead renderas="sect4">Parameters</bridgehead>
                 <simplelist>
-                        <member><code>type</code> &mdash; iteration strategy as defined in a table below.</member>
+                        <member><code>type</code> &mdash; iteration strategy as defined in tables below.</member>
                 </simplelist>
 
                 <bridgehead renderas="sect4">Returns</bridgehead>
@@ -1441,6 +1512,21 @@ error: 'Iterator type is not supported'
 
     <varlistentry>
         <term>
+            <emphasis role="lua">index:random(randint)</emphasis>
+        </term>
+        <listitem><simpara>
+           Return a random value from an index. A random
+           non-negative integer must be supplied as input, and
+           a value is selected accordingly in index-specific fashion.
+           This method is useful when it's important to get insight
+           into data distribution in an index without having to
+           iterate over the entire data set.
+        </simpara>
+        </listitem>
+    </varlistentry>
+
+    <varlistentry>
+        <term>
             <emphasis role="lua">index:count()</emphasis>
         </term>
         <listitem><simpara>
@@ -1510,9 +1596,12 @@ or <code>box.update()</code>, are calling <code>box.fiber.testcancel()</code>.
     <para>
 In practice, a runaway fiber can only become unresponsive
 if it does a lot of computations and doesn't check
-whether it's been canceled. In addition
-to the advisory cancellation, configuration parameter <code>lua_timeout</code>
-can be used to cancel runaway Lua procedures.
+whether it's been canceled.
+<!--
+In addition to the advisory cancellation, configuration parameter
+<code>lua_timeout</code> can be used to cancel runaway Lua
+procedures.
+-->
     </para>
     <para>
 The other potential problem comes from detached
@@ -1572,7 +1661,7 @@ and <code>box.fiber.testcancel()</code> is checked whenever such an event occurs
 
     <varlistentry>
         <term>
-            <emphasis role="lua">box.fiber.yield(...) </emphasis>
+            <emphasis role="lua" xml:id="box.fiber.yield" xreflabel="box.fiber.yield(...)">box.fiber.yield(...) </emphasis>
         </term>
         <listitem><para>
         Yield control to the calling fiber, if the fiber
@@ -1669,39 +1758,12 @@ event.
         <listitem><simpara>Return true if a session is alive,
         false otherwise.</simpara></listitem>
     </varlistentry>
-
-    <varlistentry>
-        <term>
-            <emphasis role="lua">box.session.on_connect(chunk) </emphasis>
-        </term>
-        <listitem><para>
-		Set a callback (trigger) invoked on each connected session.
-        The callback doesn't get any arguments, but is the first
-        thing invoked in the scope of the newly created session.
-        If the trigger fails by raising an error, the error
-        is sent to the client and the connection is shut down.
-        Returns the old value of the trigger.
-        </para>
-        <warning>
-        <para>
-        If a trigger always results in an error, it may become
-        impossible to connect to the server to reset it.
-        </para>
-        </warning>
-        </listitem>
-    </varlistentry>
-
-    <varlistentry>
-        <term>
-            <emphasis role="lua">box.session.on_disconnect(chunk)</emphasis>
-        </term>
-        <listitem><simpara>Set a trigger invoked after a client has
-        disconnected. Returns the old value of the trigger. If
-        the trigger raises an error, the error is logged but otherwise
-        is ignored.
-        </simpara></listitem>
-    </varlistentry>
 </variablelist>
+    <para>
+This module also makes it possible to define triggers on connect
+and disconnect events. Please see <olink targetptr="sp-box-session-triggers">
+the triggers chapter</olink> for details.
+    </para>
 </section>
 
 <!--   end of lib -->
@@ -1719,10 +1781,10 @@ event.
                 predefined capacity. The channel can be used
                 to synchronously exchange messages between
                 stored procedures. The channel is garbage
-                collected when no one is using it as any other
-                Lua object. Channels can be worked with using
-                functional or object-oriented syntax.
-                For example, the following two lines are equivalent:
+                collected when no one is using it, just like any
+                other Lua object. Channels can be worked with
+                using functional or object-oriented syntax. For
+                example, the following two lines are equivalent:
             </simpara>
 <programlisting>
     channel:put(message)
@@ -2193,11 +2255,12 @@ logger = cat - >> tarantool.log
         </term>
         <listitem>
             <simpara>
-            Since contents of box.info is dynamic, it's
-            not possible to iterate over keys with Lua <emphasis>pairs()</emphasis>
-            function. For this purpose, <emphasis>box.info()</emphasis> builds
-            and returns a Lua table with all keys and values
-            provided in the package.
+            Since contents of box.info is dynamic, it's not
+            possible to iterate over keys with Lua
+            <emphasis>pairs()</emphasis> function. For this
+            purpose, <emphasis>box.info()</emphasis> builds and
+            returns a Lua table with all keys and values provided
+            in the package.
             </simpara>
 
        <bridgehead renderas="sect4">Example</bridgehead><programlisting>
