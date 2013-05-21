@@ -30,10 +30,9 @@ lbox_xmldocnode_tostring(struct lua_State *L, xmlDocPtr doc, xmlNodePtr node)
 static xmlNodePtr
 lua_toxmlnode(struct lua_State *L, int index)
 {
-	lua_pushstring(L, "raw");
-	lua_rawget(L, index);
-	xmlNodePtr node = lua_touserdata(L, -1);
-	lua_pop(L, 1);
+	if (!lua_isuserdata(L, index))
+		luaL_error(L, "argument %d isn't XML node", index);
+	xmlNodePtr node = *(void **) lua_touserdata(L, index);
 	return node;
 }
 
@@ -126,7 +125,7 @@ lbox_xmlnode_parent(struct lua_State *L)
 }
 
 static int
-lbox_xmlnode_add_child(struct lua_State *L)
+lbox_xmlnode_append(struct lua_State *L)
 {
 	xmlNodePtr node = lua_toxmlnode(L, 1);
 	xmlNodePtr child = lua_toxmlnode(L, 2);
@@ -137,11 +136,8 @@ lbox_xmlnode_add_child(struct lua_State *L)
 	if (xmlAddChild(node, child)) {
 
 		/* inserted node needn't to be freed by lua gc */
-		lua_getmetatable(L, 2);
-		lua_pushstring(L, "__gc");
-		lua_pushnil(L);
-		lua_rawset(L, -3);
-		lua_pop(L, 1);
+		luaL_getmetatable(L, "box.xml.lib_nogc");
+		lua_setmetatable(L, 2);
 
 		lua_pushvalue(L, 2);
 
@@ -174,11 +170,9 @@ lbox_xmlnode_remove(struct lua_State *L)
 
 	xmlUnlinkNode(child);
 
-	lua_getmetatable(L, 1);
-	lua_pushstring(L, "__gc");
-	lua_pushcfunction(L, lbox_xmlnode_gc);
-	lua_rawset(L, -3);
-	lua_pop(L, 1);
+	/* inserted node needn't to be freed by lua gc */
+	luaL_getmetatable(L, "box.xml.lib_gc");
+	lua_setmetatable(L, 1);
 
 	lua_pushvalue(L, 1);
 
@@ -215,42 +209,16 @@ lbox_xmlnode_clone(struct lua_State *L)
 static int
 lbox_push_xmlnode(struct lua_State *L, xmlNodePtr node, int was_alloc)
 {
-	static const struct luaL_reg node_methods[] = {
-		{ "xpath",	lbox_xmlnode_xpath	},
-		{ "attribute",	lbox_xmlnode_attribute	},
-		{ "parent",	lbox_xmlnode_parent	},
-		{ "add_child",	lbox_xmlnode_add_child	},
-		{ "clone",	lbox_xmlnode_clone	},
-		{ "remove",	lbox_xmlnode_remove	},
-		{ "text",	lbox_xmlnode_text	},
-		{ NULL, NULL }
-	};
-	static const struct luaL_reg node_meta[] = {
-		{ "__tostring", lbox_xmlnode_tostring	},
-		{ "__gc", lbox_xmlnode_gc		},
-		{ NULL, NULL }
-	};
 
-	lua_newtable(L);
-	lua_pushstring(L, "raw");
-	lua_pushlightuserdata(L, node);
-	lua_settable(L, -3);
+	void **ptr = lua_newuserdata(L, sizeof(void *));
+	*ptr = node;
 
-	lua_newtable(L);
-	luaL_register(L, NULL, node_meta);
-
-	lua_pushstring(L, "__index");
-	lua_newtable(L);
-	luaL_register(L, NULL, node_methods);
-	lua_rawset(L, -3);
-
-	if (!was_alloc) {
-		lua_pushstring(L, "__gc");
-		lua_pushnil(L);
-		lua_rawset(L, -3);
-	}
-
+	if (was_alloc)
+		luaL_getmetatable(L, "box.xml.lib_gc");
+	else
+		luaL_getmetatable(L, "box.xml.lib_nogc");
 	lua_setmetatable(L, -2);
+
 	return 1;
 }
 
@@ -283,6 +251,36 @@ lbox_xml_load(struct lua_State *L)
 	return 1;
 }
 
+
+static int
+lbox_xmlnode_replace(struct lua_State *L)
+{
+	xmlNodePtr old = lua_toxmlnode(L, 1);
+	xmlNodePtr new = lua_toxmlnode(L, 2);
+
+	if (!old->parent)
+		luaL_error(L, "Can't replace not-inserted node");
+	if (new->parent)
+		luaL_error(L, "Can't insert inserted node");
+
+	if (xmlReplaceNode(old, new)) {
+		/* inserted node needn't to be freed by lua gc */
+		luaL_getmetatable(L, "box.xml.lib_nogc");
+		lua_setmetatable(L, 2);
+
+		lua_pushvalue(L, 2);
+
+		/* old element can be destroyed */
+		xmlUnlinkNode(old);
+		luaL_getmetatable(L, "box.xml.lib_gc");
+		lua_setmetatable(L, 1);
+
+	} else {
+		lua_pushnil(L);
+	}
+	return 1;
+}
+
 int
 tarantool_lua_xml_init(struct lua_State *L)
 {
@@ -302,8 +300,51 @@ tarantool_lua_xml_init(struct lua_State *L)
 	lua_rawset(L, -3);
 
 	lua_settable(L, -3);
-
 	lua_pop(L, 1);
+
+	static const struct luaL_reg node_methods[] = {
+		{ "xpath",	lbox_xmlnode_xpath	},
+		{ "attribute",	lbox_xmlnode_attribute	},
+		{ "parent",	lbox_xmlnode_parent	},
+		{ "append",	lbox_xmlnode_append	},
+		{ "clone",	lbox_xmlnode_clone	},
+		{ "remove",	lbox_xmlnode_remove	},
+		{ "replace",	lbox_xmlnode_replace	},
+		{ "text",	lbox_xmlnode_text	},
+		{ NULL, NULL }
+	};
+
+	static const struct luaL_reg node_meta_gc[] = {
+		{ "__tostring", lbox_xmlnode_tostring	},
+		{ "__gc",	lbox_xmlnode_gc		},
+		{ NULL, NULL }
+	};
+
+	static const struct luaL_reg node_meta_nogc[] = {
+		{ "__tostring", lbox_xmlnode_tostring	},
+		{ NULL, NULL }
+	};
+
+	/* box.xml.lib_gc */
+	luaL_newmetatable(L, "box.xml.lib_gc");
+	luaL_register(L, NULL, node_meta_gc);
+
+	lua_pushstring(L, "__index");
+	lua_newtable(L);
+	luaL_register(L, NULL, node_methods);
+	lua_rawset(L, -3);
+	lua_pop(L, 1);
+
+	/* box.xml.lib_nogc */
+	luaL_newmetatable(L, "box.xml.lib_nogc");
+	luaL_register(L, NULL, node_meta_nogc);
+
+	lua_pushstring(L, "__index");
+	lua_newtable(L);
+	luaL_register(L, NULL, node_methods);
+	lua_rawset(L, -3);
+	lua_pop(L, 1);
+
 	return 0;
 }
 

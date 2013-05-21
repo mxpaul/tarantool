@@ -944,6 +944,57 @@ lua box.dostring('local f = function(key) t=box.select(0, 0, key); if t ~= nil t
     </varlistentry>
     <varlistentry>
         <term>
+            <emphasis role="lua">box.xml</emphasis>
+        </term>
+        <listitem>
+            <para>
+                Allows to parse/update XML in lua procedures.
+            </para>
+            <programlisting>
+-- load XML from string
+local dom = box.xml.load('<users><user><name>Vasya</name></user></users>')
+
+-- create new element
+local element = box.xml.element('surname')
+
+-- find nodes
+local node = dom:xpath('//users')
+local nodes = { dom:xpath('//users/user/name') }
+
+-- append node to node
+element1:append(element2)
+
+-- remove element from tree
+element1:remove()
+
+-- return parent
+local parent = element:parent()
+
+-- get attribute
+local id = element:attribute('id')
+
+-- set attribute
+element:attribute('id', 123)
+
+-- serialize node/dom
+local xml = tostring( dom )
+local xml = tostring( element )
+
+-- return text content
+local txt = element:text()
+
+-- append text content
+element:text(' Pupkin')
+
+-- relace node
+element:replace( element )
+
+
+            </programlisting>
+        </listitem>
+    </varlistentry>
+    <varlistentry>
+        <term>
             <emphasis role="lua">box.raise(errcode, errtext)</emphasis>
         </term>
         <listitem>

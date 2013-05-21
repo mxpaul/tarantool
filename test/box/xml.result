@@ -7,7 +7,7 @@ lua xml = box.xml.load("<?xml version='1.0' encoding='utf-8'?><User>123<List><A>
 ...
 lua type(xml)
 ---
- - table
+ - userdata
 ...
 lua tostring(xml)
 ---
@@ -98,7 +98,11 @@ lua xml:xpath("//User/List/A[@id='abc']"):parent():parent():parent()
 ---
  - <User>123<List><A>1</A><A id="abc">2</A></List></User>
 ...
-lua xml:xpath("//User/List/A[@id='abc']"):add_child(elm)
+lua xml:append()
+---
+error: 'argument 2 isn''t XML node'
+...
+lua xml:xpath("//User/List/A[@id='abc']"):append(elm)
 ---
  - <Test abc="cde1"/>
 ...
@@ -106,7 +110,7 @@ lua xml
 ---
  - <User>123<List><A>1</A><A id="abc">2<Test abc="cde1"/></A></List></User>
 ...
-lua xml:xpath("//User"):add_child(elm:clone())
+lua xml:xpath("//User"):append(elm:clone())
 ---
  - <Test abc="cde1"/>
 ...
@@ -137,4 +141,12 @@ lua xml:xpath('//User'):text('abc')
 lua xml
 ---
  - <User>123<List><A>1</A><A id="abc">2</A></List><Test abc="cde1"/>abc</User>
+...
+lua xml:xpath("//User/List/A[@id='abc']"):replace(box.xml.element('Test'))
+---
+ - <Test/>
+...
+lua xml
+---
+ - <User>123<List><A>1</A><Test/></List><Test abc="cde1"/>abc</User>
 ...
