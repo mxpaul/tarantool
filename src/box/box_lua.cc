@@ -52,8 +52,15 @@ extern "C" {
 #include "scoped_guard.h"
 
 /* contents of box.lua, misc.lua, box.net.lua respectively */
-extern char box_lua[], box_net_lua[], misc_lua[], sql_lua[];
-static const char *lua_sources[] = { box_lua, box_net_lua, misc_lua, sql_lua, NULL };
+extern char box_lua[], box_net_lua[], misc_lua[], sql_lua[], fiber_async_lua[];
+static const char *lua_sources[] = {
+    box_lua,
+    box_net_lua,
+    misc_lua,
+    sql_lua,
+    fiber_async_lua,
+    NULL
+};
 
 /**
  * All box connections share the same Lua state. We use
