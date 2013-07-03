@@ -89,13 +89,13 @@ enum { TNT_ERRMSG_MAX = 512 };
 	/* 34 */_(ER_UNUSED34,			2, "Unused34") \
 	/* 35 */_(ER_UNUSED35,			2, "Unused35") \
 	/* 36 */_(ER_UNUSED36,			2, "Unused36") \
-	/* 37 */_(ER_UNUSED37,			2, "Unused37") \
+	/* 37 */_(ER_KEY_IS_TOO_LONG,		2, "Key is too long - %u bytes") \
 	/* 38 */_(ER_KEY_FIELD_TYPE,		2, "Supplied key field type does not match index type: expected %s") \
 	/* 39 */_(ER_WAL_IO,			2, "Failed to write to disk") \
 	/* 40 */_(ER_FIELD_TYPE,		2, "Field type does not match one required by operation: expected a %s") \
 	/* 41 */_(ER_ARG_TYPE,			2, "Argument type in operation does not match field type: expected a %s") \
 	/* 42 */_(ER_SPLICE,			2, "Field SPLICE error: %s") \
-	/* 43 */_(ER_TUPLE_IS_TOO_LONG,		2, "Tuple is too long %u") \
+	/* 43 */_(ER_TUPLE_IS_TOO_LONG,		2, "Tuple is too long - %u bytes") \
 	/* 44 */_(ER_UNKNOWN_UPDATE_OP,		2, "Unknown UPDATE operation") \
 	/* 45 */_(ER_EXACT_MATCH,		2, "Invalid key part count in an exact match (expected %u, got %u)") \
 	/* 46 */_(ER_UNUSED46,			2, "Unused46") \

@@ -682,3 +682,34 @@ exec admin "lua t = box.tuple.new('abc')"
 exec admin "lua t"
 exec admin "lua t:bsize()"
 exec admin silent "lua box.delete(0, 8989)"
+
+print """
+# A test case for Bug#1093439 check key length when reading key from network
+"""
+
+exec sql "INSERT INTO t0 VALUES(0)"
+
+# Long Tuple - 'Failed to allocate'
+exec admin "lua t=box.tuple.new({string.rep('=', 4 * 1024 * 1024 - 4)})"
+exec admin "lua box.tuple.new(''):transform(0, 1, string.rep('=', 4 * 1024 * 1024 - 4))"
+exec admin "lua box.insert(0, string.rep('=', 4 * 1024 * 1024 -4))"
+exec admin "lua box.update(0, 0, '!p', 1, string.rep('=', 4 * 1024 * 1024 - 9))"
+
+# Long Tuple - 'Tuple is too long'
+exec admin "lua t=box.tuple.new({string.rep('=', 4 * 1024 * 1024)})"
+exec admin "lua box.tuple.new(''):transform(0, 1, string.rep('=', 4 * 1024 * 1024))"
+exec admin "lua box.insert(0, string.rep('=', 4 * 1024 * 1024))"
+exec admin "lua box.update(0, 0, '!p', 1, string.rep('=', 4 * 1024 * 1024 - 4))"
+
+# Long Key - 'Supplied key field type does not match index type'
+exec admin "lua box.select(0, 0, string.rep('=', 4 * 1024 * 1024 - 4))"
+exec admin "lua box.delete(0, string.rep('=', 4 * 1024 * 1024 - 4))"
+exec admin "lua box.update(0, string.rep('=', 4 * 1024 * 1024 - 4), '!p', 0, 1)"
+
+# Long Key - 'Key is too long'
+exec admin "lua box.delete(0, string.rep('=', 4 * 1024 * 1024))"
+exec admin "lua box.select(0, 0, string.rep('=', 4 * 1024 * 1024))"
+exec admin "lua box.update(0, string.rep('=', 4 * 1024 * 1024), '!p', 0, 1)"
+
+exec sql "DELETE FROM t0 WHERE k0=0"
+

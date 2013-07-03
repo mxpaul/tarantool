@@ -910,6 +910,16 @@ lua box.space[20].index[0]:iterator(-666)
 ---
 error: 'unknown iterator type: -666'
 ...
+
+# A test case for Bug#1093439 check key length when reading key from network
+
+lua it = box.space[20].index[0]:iterator(box.index.EQ, string.rep('=', 4 * 1024 * 1024 - 4))
+---
+...
+lua it = box.space[20].index[0]:iterator(box.index.EQ, string.rep('=', 4 * 1024 * 1024))
+---
+error: 'Key is too long - 4194308 bytes'
+...
 lua box.space[20]:truncate()
 ---
 ...

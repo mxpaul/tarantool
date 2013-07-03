@@ -31,6 +31,7 @@
 #include <salloc.h>
 #include "tbuf.h"
 
+#include "box/box.h"
 #include "index.h"
 #include "tuple_update.h"
 #include <exception.h>
@@ -42,6 +43,8 @@
 struct tuple *
 tuple_alloc(size_t size)
 {
+	assert(size <= BOX_TUPLE_MAXLEN);
+
 	size_t total = sizeof(struct tuple) + size;
 	struct tuple *tuple = (struct tuple *) salloc(total, "tuple");
 
@@ -208,6 +211,9 @@ tuple_update(void *(*region_alloc)(void *, size_t), void *alloc_ctx,
 				     old_tuple->data + old_tuple->bsize,
 				     old_tuple->field_count, &new_size,
 				     &new_field_count);
+
+	if (new_size > BOX_TUPLE_MAXLEN)
+		tnt_raise(ClientError, ER_TUPLE_IS_TOO_LONG, new_size);
 
 	/* Allocate a new tuple. */
 	struct tuple *new_tuple = tuple_alloc(new_size);

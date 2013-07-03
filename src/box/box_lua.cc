@@ -631,6 +631,9 @@ lbox_pushiterator(struct lua_State *L, Index *index,
 		  struct iterator *it, enum iterator_type type,
 		  const char *key, size_t size, int part_count)
 {
+	if (size > BOX_KEY_MAXLEN)
+		tnt_raise(ClientError, ER_KEY_IS_TOO_LONG, (uint32_t) size);
+
 	struct lbox_iterator_udata {
 		struct iterator *it;
 		char key[];
@@ -1034,6 +1037,8 @@ lua_table_to_tuple(struct lua_State *L, int index)
 		tuple_len += field.len + varint32_sizeof(field.len);
 		lua_pop(L, 1);
 	}
+	if (tuple_len > BOX_TUPLE_MAXLEN)
+		tnt_raise(ClientError, ER_TUPLE_IS_TOO_LONG, tuple_len);
 	struct tuple *tuple = tuple_alloc(tuple_len);
 	/*
 	 * Important: from here and on if there is an exception,
@@ -1061,7 +1066,10 @@ lua_totuple(struct lua_State *L, int index)
 	struct lua_field field;
 	lua_tofield(L, index, &field);
 	if (field.type != UNKNOWN) {
-		tuple = tuple_alloc(field.len + varint32_sizeof(field.len));
+		uint32_t tuple_len = field.len + varint32_sizeof(field.len);
+		if (tuple_len > BOX_TUPLE_MAXLEN)
+			tnt_raise(ClientError, ER_TUPLE_IS_TOO_LONG, tuple_len);
+		tuple = tuple_alloc(tuple_len);
 		tuple->field_count = 1;
 		pack_lstr(tuple->data, field.data, field.len);
 		return tuple;
@@ -1585,6 +1593,9 @@ box_unpack_response(struct lua_State *L, const char *s, const char *end)
 	/* Unpack and push tuples. */
 	while (tuple_count--) {
 		uint32_t bsize = pick_u32(&s, end);
+		if (bsize > BOX_TUPLE_MAXLEN)
+			tnt_raise(ClientError, ER_TUPLE_IS_TOO_LONG, bsize);
+
 		uint32_t field_count = pick_u32(&s, end);
 		const char *tend = s + bsize;
 		if (tend > end)

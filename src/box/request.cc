@@ -46,8 +46,13 @@ read_key(const char **reqpos, const char *reqend, uint32_t *key_part_count)
 	*key_part_count = pick_u32(reqpos, reqend);
 	const char *key = *key_part_count ? *reqpos : NULL;
 	/* Advance remaining fields of a key */
-	for (uint32_t i = 0; i < *key_part_count; i++)
+	for (uint32_t i = 0; i < *key_part_count; i++) {
 		pick_field(reqpos, reqend);
+		if (*reqpos - key > BOX_TUPLE_MAXLEN) {
+			tnt_raise(ClientError, ER_KEY_IS_TOO_LONG,
+				(uint32_t) (*reqpos - key));
+		}
+	}
 	return key;
 }
 
@@ -76,6 +81,10 @@ execute_replace(struct request *request, struct txn *txn)
 	request->flags |= (pick_u32(reqpos, reqend) &
 			   BOX_ALLOWED_REQUEST_FLAGS);
 	uint32_t field_count = pick_u32(reqpos, reqend);
+
+	if (reqend - *reqpos > BOX_TUPLE_MAXLEN)
+		tnt_raise(ClientError, ER_TUPLE_IS_TOO_LONG,
+			  (uint32_t) (reqend - *reqpos));
 
 	struct tuple *new_tuple = tuple_new(field_count, reqpos, reqend);
 	try {

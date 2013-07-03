@@ -171,4 +171,13 @@ print """
 
 exec admin "lua box.space[20].index[0]:iterator(-666)"
 
+print """
+# A test case for Bug#1093439 check key length when reading key from network
+"""
+
+# Long key - OK
+exec admin "lua it = box.space[20].index[0]:iterator(box.index.EQ, string.rep('=', 4 * 1024 * 1024 - 4))"
+# Long key - 'Key is too long'
+exec admin "lua it = box.space[20].index[0]:iterator(box.index.EQ, string.rep('=', 4 * 1024 * 1024))"
+
 exec admin "lua box.space[20]:truncate()"

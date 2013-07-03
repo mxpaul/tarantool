@@ -100,7 +100,9 @@ box_leave_local_standby_mode(void *data __attribute__((unused)));
 enum {
 	BOX_SPACE_MAX = UINT32_MAX,
 	BOX_INDEX_MAX = 10,
-	BOX_FIELD_MAX = UINT32_MAX
+	BOX_FIELD_MAX = UINT32_MAX,
+	BOX_TUPLE_MAXLEN = 1 << 22, /* 4MB */
+	BOX_KEY_MAXLEN   = 1 << 22  /* 4MB */
 };
 
 #if defined(__cplusplus)

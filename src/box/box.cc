@@ -132,6 +132,10 @@ recover_snap_row(const void *data)
 	}
 	struct tuple *tuple;
 	try {
+		if (row->data_size > BOX_TUPLE_MAXLEN)
+			tnt_raise(ClientError, ER_TUPLE_IS_TOO_LONG,
+				  row->data_size);
+
 		const char *tuple_data = row->data;
 		tuple = tuple_new(row->tuple_size, &tuple_data,
 				  tuple_data + row->data_size);
