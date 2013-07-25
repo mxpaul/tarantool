@@ -89,6 +89,30 @@ index_count(struct space *sp)
 	}
 }
 
+struct space_stat *
+space_stat() {
+    static __thread struct space_stat space_stat[SPACE_STAT_MAX];
+
+    int sp_i = 0;
+	mh_int_t i;
+	mh_foreach(spaces, i) {
+		struct space *sp = mh_value(spaces, i);
+        space_stat[sp_i].n = space_n(sp);
+        int n = sp->key_count;
+        int i = 0;
+        for (; i < n; i++) {
+            Index *index = sp->index[i];
+            space_stat[sp_i].index[i].n       = i;
+            space_stat[sp_i].index[i].keys    = [ index size ];
+            space_stat[sp_i].index[i].memsize = [ index memsize: 0 ];
+        }
+        space_stat[sp_i].index[i].n = -1;
+        ++sp_i;
+	}
+    space_stat[sp_i].n = -1;
+    return space_stat;
+}
+
 /**
  * Visit all enabled spaces and apply 'func'.
  */
