@@ -89,8 +89,8 @@ salloc_stat_admin_cb(const struct slab_class_stats *cstat, void *cb_ctx)
 	struct salloc_stat_admin_cb_ctx *ctx = cb_ctx;
 
 	tbuf_printf(ctx->out,
-		    "     - { item_size: %6i, slabs: %5i, items: %11" PRIi64
-		    ", bytes_used: %12" PRIi64 ", waste: %.2f%%"
+		    "     - { item_size: %6i, slabs: %6i, items: %11" PRIi64
+		    ", bytes_used: %12" PRIi64 ", waste: %5.2f%%"
 		    ", bytes_free: %12" PRIi64 " }" CRLF,
 		    (int)cstat->item_size,
 		    (int)cstat->slabs,
