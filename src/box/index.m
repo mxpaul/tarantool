@@ -61,7 +61,6 @@ check_key_parts(struct key_def *key_def,
 /* {{{ Index -- base class for all indexes. ********************/
 
 @interface HashIndex: Index
-- (void) reserve: (u32) n_tuples;
 @end
 
 @interface HashStrIndex: HashIndex {
@@ -165,6 +164,19 @@ check_key_parts(struct key_def *key_def,
 {
 	[self subclassResponsibility: _cmd];
 	return 0;
+}
+
+- (size_t) memsize: (size_t) nelements
+{
+    (void)nelements;
+	[self subclassResponsibility: _cmd];
+	return 0;
+}
+
+- (void) reserve: (u32) n_tuples
+{
+	(void) n_tuples;
+	[self subclassResponsibility: _cmd];
 }
 
 - (struct tuple *) min
@@ -355,12 +367,6 @@ hash_iterator_lstr_eq(struct iterator *it)
 	return &hash_index_traits;
 }
 
-- (void) reserve: (u32) n_tuples
-{
-	(void) n_tuples;
-	[self subclassResponsibility: _cmd];
-}
-
 - (void) beginBuild
 {
 }
@@ -462,6 +468,11 @@ int32_key_to_value(void *key)
 - (size_t) size
 {
 	return mh_size(int_hash);
+}
+
+- (size_t) memsize: (size_t) nelements
+{
+    return mh_i32ptr_memsize(int_hash, nelements);
 }
 
 - (struct tuple *) findUnsafe: (void *) key :(int) part_count
@@ -599,6 +610,11 @@ int64_key_to_value(void *key)
 	return mh_size(int64_hash);
 }
 
+- (size_t) memsize: (size_t) nelements
+{
+    return mh_i64ptr_memsize(int64_hash, nelements);
+}
+
 - (struct tuple *) findUnsafe: (void *) key :(int) part_count
 {
 	(void) part_count;
@@ -723,6 +739,11 @@ int64_key_to_value(void *key)
 - (size_t) size
 {
 	return mh_size(str_hash);
+}
+
+- (size_t) memsize: (size_t) nelements
+{
+    return mh_lstrptr_memsize(str_hash, nelements);
 }
 
 - (struct tuple *) findUnsafe: (void *) key :(int) part_count

@@ -316,6 +316,8 @@ space_config()
 		return;
 	}
 
+    i64 all_spaces_index_sz = 0;
+
 	/* fill box spaces */
 	for (int i = 0; cfg.space[i] != NULL; ++i) {
 		tarantool_cfg_space *cfg_space = cfg.space[i];
@@ -356,18 +358,28 @@ space_config()
 		space_init_field_types(space);
 
 		/* fill space indexes */
+        i64 space_index_sz = 0;
 		for (int j = 0; cfg_space->index[j] != NULL; ++j) {
 			typeof(cfg_space->index[j]) cfg_index = cfg_space->index[j];
 			enum index_type type = STR2ENUM(index_type, cfg_index->type);
 			struct key_def *key_def = &space->key_defs[j];
 			Index *index = [Index alloc: type :key_def :space];
 			[index init: key_def :space];
+            if(type == HASH)
+                [ index reserve: cfg_space->estimated_rows];
+
 			space->index[j] = index;
+
+            i64 isz = [index memsize: cfg_space->estimated_rows];
+            space_index_sz += isz;
+            say_info("space %i index %i successfully configured, estimated size = %" PRIi64, i, j, isz);
 		}
 
 		mh_i32ptr_put(spaces, space->no, space, NULL);
-		say_info("space %i successfully configured", i);
+		say_info("space %i successfully configured, estimated indexes size = %" PRIi64, i, space_index_sz);
+        all_spaces_index_sz += space_index_sz;
 	}
+    say_info("all spaces successfully configured, estimated indexes size = %" PRIi64, all_spaces_index_sz);
 }
 
 void

@@ -152,6 +152,7 @@ struct _mh(t) * _mh(init)();
 void _mh(clear)(struct _mh(t) *h);
 void _mh(destroy)(struct _mh(t) *h);
 void _mh(resize)(struct _mh(t) *h);
+size_t _mh(memsize)(struct _mh(t) *h, mh_int_t buckets);
 int _mh(start_resize)(struct _mh(t) *h, mh_int_t buckets, mh_int_t batch);
 void _mh(reserve)(struct _mh(t) *h, mh_int_t size);
 void __attribute__((noinline)) _mh(put_resize)(struct _mh(t) *h, mh_key_t key, mh_val_t val);
@@ -336,6 +337,32 @@ _mh(destroy)(struct _mh(t) *h)
 	free(h->b);
 	free(h->p);
 	free(h);
+}
+
+size_t
+_mh(memsize)(struct _mh(t) *h, mh_int_t buckets)
+{
+    size_t sz = 2*sizeof(struct _mh(t));
+
+    if(buckets > 0) { // estimation
+        mh_int_t prime = 1;
+        while (prime < __ac_HASH_PRIME_SIZE) {
+            if (__ac_prime_list[prime] >= buckets)
+                break;
+            prime += 1;
+        }
+        buckets = __ac_prime_list[prime];
+        //buckets += prime < __ac_HASH_PRIME_SIZE ? __ac_prime_list[prime + 1] : 2*buckets;
+        sz += buckets * sizeof(struct _mh(pair)) + (buckets / 16 + 1) * sizeof(unsigned);
+        return sz;
+    }
+
+    sz += h->n_buckets * sizeof(struct _mh(pair)) + (h->n_buckets / 16 + 1) * sizeof(unsigned);
+    if(h->resize_position) {
+        h = h->shadow;
+        sz += h->n_buckets * sizeof(struct _mh(pair)) + (h->n_buckets / 16 + 1) * sizeof(unsigned);
+    }
+    return sz;
 }
 
 void

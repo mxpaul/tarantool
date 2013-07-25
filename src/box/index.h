@@ -130,7 +130,9 @@ struct index_traits
 - (void) endBuild;
 /** Build this index based on the contents of another index. */
 - (void) build: (Index *) pk;
+- (void) reserve: (u32) n_tuples;
 - (size_t) size;
+- (size_t) memsize: (size_t) nelements;
 - (struct tuple *) min;
 - (struct tuple *) max;
 - (struct tuple *) findByKey: (void *) key :(int) part_count;

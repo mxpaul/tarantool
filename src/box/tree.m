@@ -875,6 +875,14 @@ tree_iterator_free(struct iterator *iterator)
 	return tree.size;
 }
 
+- (size_t) memsize: (size_t) nelements
+{
+    if(nelements == 0) nelements = tree.max_size;
+    else nelements = 1.2 * nelements;
+
+	return nelements * (8 + [self node_size]);
+}
+
 - (struct tuple *) min
 {
 	void *node = sptree_index_first(&tree);

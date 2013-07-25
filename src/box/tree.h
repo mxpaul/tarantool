@@ -56,6 +56,7 @@ typedef int (*tree_cmp_t)(const void *, const void *, void *);
 - (tree_cmp_t) key_node_cmp;
 - (void) fold: (void *) node :(struct tuple *) tuple;
 - (struct tuple *) unfold: (const void *) node;
+- (size_t) memsize: (size_t) nelements;
 
 @end
 
