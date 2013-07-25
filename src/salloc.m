@@ -177,20 +177,17 @@ arena_init(struct arena *arena, size_t size, char *arena_name)
 	arena->mmap_size = size - size % SLAB_SIZE + SLAB_SIZE;	/* spend SLAB_SIZE bytes on align :-( */
     arena->file_name = strdup(arena_name);
 
-    say_warn("open");
     int fd = open(arena->file_name,O_CREAT|O_RDWR|O_TRUNC, 0700);
     if(fd <= 0) {
 		say_syserror("open");
         return false;
     }
 
-    say_warn("size");
     if(ftruncate(fd, arena->mmap_size)) {
 		say_syserror("ftruncate");
         return false;
     }
 
-    say_warn("mmap");
     arena->mmap_base = mmap(NULL, arena->mmap_size,
                             PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (arena->mmap_base == MAP_FAILED) {
@@ -198,7 +195,6 @@ arena_init(struct arena *arena, size_t size, char *arena_name)
         return false;
     }
 
-    say_warn("close");
     close(fd);
 	arena->base = (char *)SLAB_ALIGN_PTR(arena->mmap_base) + SLAB_SIZE;
 	return true;
