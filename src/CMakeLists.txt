@@ -41,7 +41,7 @@ endif()
 if (TARGET_OS_DEBIAN_FREEBSD)
   set (ev_libs m rt)
 else()
-  set (ev_libs m rt)
+  set (ev_libs m)
 endif()
 
 target_link_libraries(ev ${ev_libs})
