@@ -92,6 +92,10 @@ core_check_config(struct tarantool_cfg *conf)
 		out_warning(0, "wal_mode %s is not recognized", conf->wal_mode);
 		return -1;
 	}
+    if(conf->slab_arena_filename == NULL) {
+		out_warning(0, "slab_arena_filename not set");
+		return -1;
+    }
 	return 0;
 }
 
@@ -315,19 +319,27 @@ tarantool_uptime(void)
 }
 
 int
-snapshot(void)
+snapshot(int n)
 {
 	if (snapshot_pid)
 		return EINPROGRESS;
 
-	pid_t p = fork();
+    if (n == 2)
+        salloc_delayed_free_mode(1);
+
+    pid_t p = fork();
+
 	if (p < 0) {
 		say_syserror("fork");
 		return -1;
 	}
+
 	if (p > 0) {
 		snapshot_pid = p;
+        say_warn("waiting for dumper %d", p);
 		int status = wait_for_child(p);
+        say_warn("dumper finished %d", p);
+        if(n == 2) salloc_delayed_free_mode(0);
 		snapshot_pid = 0;
 		return (WIFSIGNALED(status) ? EINTR : WEXITSTATUS(status));
 	}
@@ -339,13 +351,15 @@ snapshot(void)
 	 * Safety: make sure we don't double-write
 	 * parent stdio buffers at exit().
 	 */
+
 	close_all_xcpt(1, sayfd);
+
+    if(n == 2)
+        salloc_reattach();
+
 	snapshot_save(recovery_state, box_snapshot);
-
-	exit(EXIT_SUCCESS);
-	return 0;
+    _exit(0);
 }
-
 
 /**
 * Create snapshot from signal handler (SIGUSR1)
@@ -359,7 +373,7 @@ sig_snapshot(void)
 			" the signal is ignored");
 		return;
 	}
-	fiber_call(fiber_create("snapshot", (fiber_func)snapshot));
+	fiber_call(fiber_create("snapshot", (fiber_func)snapshot), 1);
 }
 
 static void
@@ -608,7 +622,7 @@ tarantool_free(void)
 static void
 initialize_minimal()
 {
-	if (!salloc_init(64 * 1000 * 1000, 4, 2))
+	if (!salloc_init(64 * 1000 * 1000, 4, 2, "/tmp/tarantool_arena.bin"))
 		panic_syserror("can't initialize slab allocator");
 	fiber_init();
 }
@@ -855,8 +869,10 @@ main(int argc, char **argv)
 	ev_default_loop(EVFLAG_AUTO);
 	fiber_init();
 	replication_prefork();
-	salloc_init(cfg.slab_alloc_arena * (1 << 30) /* GB */,
-		    cfg.slab_alloc_minimal, cfg.slab_alloc_factor);
+	if(!salloc_init(cfg.slab_alloc_arena * (1 << 30) /* GB */,
+                    cfg.slab_alloc_minimal, cfg.slab_alloc_factor, "/mnt/huge/tarantool-arena")) {
+		panic_syserror("can't initialize slab allocator");
+    }
 
 	signal_init();
 
@@ -892,6 +908,7 @@ main(int argc, char **argv)
 		say_crit("entering event loop");
 		if (cfg.io_collect_interval > 0)
 			ev_set_io_collect_interval(cfg.io_collect_interval);
+
 		ev_now_update();
 		start_time = ev_now();
 		ev_loop(0);

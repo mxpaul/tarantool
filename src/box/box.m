@@ -152,7 +152,7 @@ box_xlog_sprint(struct tbuf *buf, const struct tbuf *t)
 	op = read_u16(b);
 	n = read_u32(b);
 
-	tbuf_printf(buf, "tm:%.3f t:%" PRIu16 " %s:%d %s n:%i",
+	tbuf_printf(buf, "tm:%.3f t:%" PRIu16 " %s:%d %s n:%i ",
 		    row->tm, tag, inet_ntoa(peer->sin_addr), ntohs(peer->sin_port),
 		    requests_strs[op], n);
 

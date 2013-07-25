@@ -85,6 +85,12 @@ typedef struct tarantool_cfg {
 	/* Growth factor, each subsequent unit size is factor * prev unit size */
 	double	slab_alloc_factor;
 
+	/* File pointing to memory (tmpfs, hugetlbfs) (target fs must have at least slab_alloc_arena GB of free space) */
+	char*	slab_arena_filename;
+
+	/* After save snapshot2, memory will be freed in a batch of */
+	int32_t	slab_delayed_free_batch;
+
 	/* working directory (daemon will chdir(2) to it) */
 	char*	work_dir;
 
