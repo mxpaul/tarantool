@@ -92,10 +92,6 @@ core_check_config(struct tarantool_cfg *conf)
 		out_warning(0, "wal_mode %s is not recognized", conf->wal_mode);
 		return -1;
 	}
-    if(conf->slab_arena_filename == NULL) {
-		out_warning(0, "slab_arena_filename not set");
-		return -1;
-    }
 	return 0;
 }
 
@@ -268,9 +264,11 @@ reload_cfg(struct tbuf *out)
 		/* Now pass the config to the module, to take action. */
 		if (box_reload_config(&cfg, &new_cfg) != 0)
 			return -1;
+
 		/* All OK, activate the config. */
 		swap_tarantool_cfg(&cfg, &new_cfg);
 		tarantool_lua_load_cfg(tarantool_L, &cfg);
+        salloc_delayed_free_batch(cfg.slab_delayed_free_batch);
 	}
 	@finally {
 		destroy_tarantool_cfg(&aux_cfg);
@@ -319,13 +317,12 @@ tarantool_uptime(void)
 }
 
 int
-snapshot(int n)
+snapshot()
 {
 	if (snapshot_pid)
 		return EINPROGRESS;
 
-    if (n == 2)
-        salloc_delayed_free_mode(1);
+    salloc_delayed_free_mode(1);
 
     pid_t p = fork();
 
@@ -339,7 +336,7 @@ snapshot(int n)
         say_warn("waiting for dumper %d", p);
 		int status = wait_for_child(p);
         say_warn("dumper finished %d", p);
-        if(n == 2) salloc_delayed_free_mode(0);
+        salloc_delayed_free_mode(0);
 		snapshot_pid = 0;
 		return (WIFSIGNALED(status) ? EINTR : WEXITSTATUS(status));
 	}
@@ -353,9 +350,7 @@ snapshot(int n)
 	 */
 
 	close_all_xcpt(1, sayfd);
-
-    if(n == 2)
-        salloc_reattach();
+    salloc_reattach();
 
 	snapshot_save(recovery_state, box_snapshot);
     _exit(0);
@@ -622,7 +617,7 @@ tarantool_free(void)
 static void
 initialize_minimal()
 {
-	if (!salloc_init(64 * 1000 * 1000, 4, 2, "/tmp/tarantool_arena.bin"))
+	if (!salloc_init(64 * 1000 * 1000, 4, 2, 0))
 		panic_syserror("can't initialize slab allocator");
 	fiber_init();
 }
@@ -870,9 +865,10 @@ main(int argc, char **argv)
 	fiber_init();
 	replication_prefork();
 	if(!salloc_init(cfg.slab_alloc_arena * (1 << 30) /* GB */,
-                    cfg.slab_alloc_minimal, cfg.slab_alloc_factor, "/mnt/huge/tarantool-arena")) {
+                    cfg.slab_alloc_minimal, cfg.slab_alloc_factor, cfg.slab_arena_shared)) {
 		panic_syserror("can't initialize slab allocator");
     }
+    salloc_delayed_free_batch(cfg.slab_delayed_free_batch);
 
 	signal_init();
 

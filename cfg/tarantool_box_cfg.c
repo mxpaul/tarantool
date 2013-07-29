@@ -38,7 +38,7 @@ init_tarantool_cfg(tarantool_cfg *c) {
 	c->slab_alloc_arena = 0;
 	c->slab_alloc_minimal = 0;
 	c->slab_alloc_factor = 0;
-	c->slab_arena_filename = NULL;
+	c->slab_arena_shared = 0;
     c->slab_delayed_free_batch = 0;
 	c->work_dir = NULL;
 	c->snap_dir = NULL;
@@ -86,7 +86,7 @@ fill_default_tarantool_cfg(tarantool_cfg *c) {
 	c->slab_alloc_arena = 1;
 	c->slab_alloc_minimal = 64;
 	c->slab_alloc_factor = 2;
-	c->slab_arena_filename = NULL;
+	c->slab_arena_shared = 0;
     c->slab_delayed_free_batch = 1000;
 	c->work_dir = NULL;
 	c->snap_dir = strdup(".");
@@ -188,8 +188,8 @@ static NameAtom _name__slab_alloc_minimal[] = {
 static NameAtom _name__slab_alloc_factor[] = {
 	{ "slab_alloc_factor", -1, NULL }
 };
-static NameAtom _name__slab_arena_filename[] = {
-	{ "slab_arena_filename", -1, NULL }
+static NameAtom _name__slab_arena_shared[] = {
+	{ "slab_arena_shared", -1, NULL }
 };
 static NameAtom _name__slab_delayed_free_batch[] = {
 	{ "slab_delayed_free_batch", -1, NULL }
@@ -508,17 +508,19 @@ acceptValue(tarantool_cfg* c, OptDef* opt, int check_rdonly) {
 			return CNF_RDONLY;
 		c->slab_alloc_factor = dbl;
 	}
-	else if ( cmpNameAtoms( opt->name, _name__slab_arena_filename) ) {
+	else if ( cmpNameAtoms( opt->name, _name__slab_arena_shared) ) {
 		if (opt->paramType != scalarType )
 			return CNF_WRONGTYPE;
 		c->__confetti_flags &= ~CNF_FLAG_STRUCT_NOTSET;
 		errno = 0;
-		if (check_rdonly && ( (opt->paramValue.scalarval == NULL && c->slab_arena_filename == NULL) || strcmp(opt->paramValue.scalarval, c->slab_arena_filename) != 0))
+		long int i32 = strtol(opt->paramValue.scalarval, NULL, 10);
+		if (i32 == 0 && errno == EINVAL)
+			return CNF_WRONGINT;
+		if ( (i32 == LONG_MIN || i32 == LONG_MAX) && errno == ERANGE)
+			return CNF_WRONGRANGE;
+		if (check_rdonly && c->slab_arena_shared != i32)
 			return CNF_RDONLY;
-		 if (c->slab_arena_filename) free(c->slab_arena_filename);
-		c->slab_arena_filename = (opt->paramValue.scalarval) ? strdup(opt->paramValue.scalarval) : NULL;
-		if (opt->paramValue.scalarval && c->slab_arena_filename == NULL)
-			return CNF_NOMEMORY;
+		c->slab_arena_shared = i32;
 	}
 	else if ( cmpNameAtoms( opt->name, _name__slab_delayed_free_batch) ) {
 		if (opt->paramType != scalarType )
@@ -1241,7 +1243,7 @@ typedef enum IteratorState {
 	S_name__slab_alloc_arena,
 	S_name__slab_alloc_minimal,
 	S_name__slab_alloc_factor,
-	S_name__slab_arena_filename,
+	S_name__slab_arena_shared,
 	S_name__slab_delayed_free_batch,
 	S_name__work_dir,
 	S_name__snap_dir,
@@ -1414,16 +1416,17 @@ again:
 			}
 			sprintf(*v, "%g", c->slab_alloc_factor);
 			snprintf(buf, PRINTBUFLEN-1, "slab_alloc_factor");
-			i->state = S_name__slab_arena_filename;
+			i->state = S_name__slab_arena_shared;
 			return buf;
-		case S_name__slab_arena_filename:
-			*v = (c->slab_arena_filename) ? strdup(c->slab_arena_filename) : NULL;
-			if (*v == NULL && c->slab_arena_filename) {
+		case S_name__slab_arena_shared:
+			*v = malloc(32);
+			if (*v == NULL && c->slab_arena_shared) {
 				free(i);
 				out_warning(CNF_NOMEMORY, "No memory to output value");
 				return NULL;
 			}
-			snprintf(buf, PRINTBUFLEN-1, "slab_arena_filename");
+			sprintf(*v, "%"PRId32, c->slab_arena_shared);
+			snprintf(buf, PRINTBUFLEN-1, "slab_arena_shared");
 			i->state = S_name__slab_delayed_free_batch;
 			return buf;
 		case S_name__slab_delayed_free_batch:
@@ -2026,9 +2029,7 @@ dup_tarantool_cfg(tarantool_cfg* dst, tarantool_cfg* src) {
 	dst->slab_alloc_arena = src->slab_alloc_arena;
 	dst->slab_alloc_minimal = src->slab_alloc_minimal;
 	dst->slab_alloc_factor = src->slab_alloc_factor;
-	if (dst->slab_arena_filename) free(dst->slab_arena_filename);dst->slab_arena_filename = src->slab_arena_filename == NULL ? NULL : strdup(src->slab_arena_filename);
-	if (src->slab_arena_filename != NULL && dst->slab_arena_filename == NULL)
-		return CNF_NOMEMORY;
+	dst->slab_arena_shared = src->slab_arena_shared;
 	dst->slab_delayed_free_batch = src->slab_delayed_free_batch;
 	if (dst->work_dir) free(dst->work_dir);dst->work_dir = src->work_dir == NULL ? NULL : strdup(src->work_dir);
 	if (src->work_dir != NULL && dst->work_dir == NULL)
@@ -2274,8 +2275,8 @@ cmp_tarantool_cfg(tarantool_cfg* c1, tarantool_cfg* c2, int only_check_rdonly) {
 
 		return diff;
 	}
-	if (confetti_strcmp(c1->slab_arena_filename, c2->slab_arena_filename) != 0) {
-		snprintf(diff, PRINTBUFLEN - 1, "%s", "c->slab_arena_filename");
+	if (c1->slab_arena_shared != c2->slab_arena_shared) {
+		snprintf(diff, PRINTBUFLEN - 1, "%s", "c->slab_arena_shared");
 
 		return diff;
 }

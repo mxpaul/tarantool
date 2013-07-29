@@ -257,7 +257,7 @@ admin_dispatch(struct ev_io *coio, struct iobuf *iobuf, lua_State *L)
 		}
 
 		action save_snapshot {
-			int ret = snapshot(1);
+			int ret = snapshot();
 
 			if (ret == 0)
 				ok(out);
@@ -268,19 +268,6 @@ admin_dispatch(struct ev_io *coio, struct iobuf *iobuf, lua_State *L)
 				fail(out, err);
 			}
 		}
-
-        action save_snapshot2 {
-            int ret = snapshot(2);
-
-            if (ret == 0)
-                ok(out);
-            else {
-                tbuf_printf(err, " can't save snapshot2, errno %d (%s)",
-                            ret, strerror(ret));
-
-                fail(out, err);
-            }
-        }
 
 		action set_injection {
 			strstart[strend-strstart] = '\0';
@@ -308,7 +295,6 @@ admin_dispatch(struct ev_io *coio, struct iobuf *iobuf, lua_State *L)
 		save = "sa"("v"("e")?)?;
 		coredump = "co"("r"("e"("d"("u"("m"("p")?)?)?)?)?)?;
 		snapshot = "sn"("a"("p"("s"("h"("o"("t")?)?)?)?)?)?;
-		snapshot2 = "sn"("a"("p"("s"("h"("o"("t")?)?)?)?)?)?"2";
 		string = [^\r\n]+ >{strstart = p;}  %{strend = p;};
 		reload = "re"("l"("o"("a"("d")?)?)?)?;
 		lua = "lu"("a")?;
@@ -335,7 +321,6 @@ admin_dispatch(struct ev_io *coio, struct iobuf *iobuf, lua_State *L)
 			    set " "+ injection " "+ name " "+ state	%set_injection                  |
 			    save " "+ coredump		%{coredump(60); ok(out);}			|
 			    save " "+ snapshot		%save_snapshot					|
-			    save " "+ snapshot2		%save_snapshot2					|
 			    check " "+ slab		%{slab_validate(); ok(out);}			|
 			    reload " "+ configuration	%reload_configuration);
 

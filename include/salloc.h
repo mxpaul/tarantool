@@ -34,7 +34,7 @@
 
 struct tbuf;
 
-bool salloc_init(size_t size, size_t minimal, double factor, char *arena_name);
+bool salloc_init(size_t size, size_t minimal, double factor, bool sharedmem);
 void salloc_destroy(void);
 void *salloc(size_t size, const char *what);
 void sfree(void *ptr);
@@ -67,5 +67,6 @@ salloc_stat(salloc_stat_cb cb, struct slab_arena_stats *astat, void *cb_ctx);
 
 bool salloc_reattach();
 void salloc_delayed_free_mode(bool mode);
+void salloc_delayed_free_batch(size_t batch);
 
 #endif /* TARANTOOL_SALLOC_H_INCLUDED */

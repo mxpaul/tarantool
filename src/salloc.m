@@ -67,9 +67,6 @@ struct slab_item {
     SLIST_ENTRY(slab_item) next;
 } __packed__;
 
-#define SIZEOF_ITEM_LIST_ENTRY (sizeof(struct slab_item))
-#define SFREE_DELAYED_FREE_BATCH 1000
-
 SLIST_HEAD(item_slist_head, slab_item);
 SLIST_HEAD(slab_slist_head, slab);
 TAILQ_HEAD(slab_tailq_head, slab);
@@ -98,14 +95,18 @@ struct arena {
 	void *mmap_base;
 	size_t mmap_size;
 
-    char *file_name;
+    bool shared;
     i64 delayed_free_count;
     i64 delayed_free_size;
+    bool delayed_free_mode;
+    size_t delayed_free_batch;
 
 	void *base;
 	size_t size;
 	size_t used;
 };
+
+static inline size_t SIZEOF_ITEM_LIST_ENTRY(struct arena *arena) { return arena->shared ? sizeof(struct slab_item) : 0; }
 
 size_t slab_active_classes;
 struct slab_class slab_classes[256];
@@ -113,8 +114,6 @@ struct arena arena;
 
 struct slab_slist_head slabs, free_slabs;
 struct item_slist_head free_delayed;
-
-bool delayed_free_mode;
 
 static struct slab *
 slab_header(void *ptr)
@@ -145,23 +144,7 @@ slab_classes_init(size_t minimal, double factor)
 }
 
 static bool arena_reattach(struct arena *arena) {
-    void *base = arena->mmap_base;
-    munmap(base, arena->mmap_size);
-    
-    int fd = open(arena->file_name, O_RDONLY, 0400);
-    if(fd <= 0) {
-		say_syserror("open");
-        return false;
-    }
-              
-    arena->mmap_base = mmap(base, arena->mmap_size,
-                            PROT_READ, MAP_FIXED | MAP_SHARED, fd, 0);
-    if (arena->mmap_base == MAP_FAILED) {
-        say_syserror("mmap");
-        return false;
-    }
-
-    close(fd);
+    mprotect(arena->mmap_base, arena->mmap_size, PROT_READ);
     return true;
 }
 
@@ -170,32 +153,22 @@ bool salloc_reattach() {
 }
 
 static bool
-arena_init(struct arena *arena, size_t size, char *arena_name)
+arena_init(struct arena *arena, size_t size, bool sharedmem)
 {
 	arena->used = 0;
 	arena->size = size - size % SLAB_SIZE;
 	arena->mmap_size = size - size % SLAB_SIZE + SLAB_SIZE;	/* spend SLAB_SIZE bytes on align :-( */
-    arena->file_name = strdup(arena_name);
-
-    int fd = open(arena->file_name,O_CREAT|O_RDWR|O_TRUNC, 0700);
-    if(fd <= 0) {
-		say_syserror("open");
-        return false;
-    }
-
-    if(ftruncate(fd, arena->mmap_size)) {
-		say_syserror("ftruncate");
-        return false;
-    }
+    arena->shared = sharedmem;
+    arena->delayed_free_mode = 0;
+    arena->delayed_free_batch = 100;
 
     arena->mmap_base = mmap(NULL, arena->mmap_size,
-                            PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+                            PROT_READ | PROT_WRITE, MAP_ANONYMOUS | (arena->shared ? MAP_SHARED : MAP_PRIVATE), -1, 0);
     if (arena->mmap_base == MAP_FAILED) {
         say_syserror("mmap");
         return false;
     }
 
-    close(fd);
 	arena->base = (char *)SLAB_ALIGN_PTR(arena->mmap_base) + SLAB_SIZE;
 	return true;
 }
@@ -216,16 +189,20 @@ arena_alloc(struct arena *arena)
 }
 
 bool
-salloc_init(size_t size, size_t minimal, double factor, char *arena_file_name)
+salloc_init(size_t size, size_t minimal, double factor, bool sharedmem)
 {
 	if (size < SLAB_SIZE * 2)
 		return false;
 
-	if (!arena_init(&arena, size, arena_file_name))
+	if (!arena_init(&arena, size, sharedmem))
 		return false;
 
 	slab_classes_init(MAX(sizeof(void *), minimal), factor);
 	return true;
+}
+
+void salloc_delayed_free_batch(size_t batch) {
+    arena.delayed_free_batch = batch;
 }
 
 void
@@ -327,7 +304,7 @@ void sfree_do(void* ptr);
 void
 sfree_delayed_free_now(i64 batch) {
     if(batch <= 0)
-        batch = SFREE_DELAYED_FREE_BATCH;
+        batch = arena.delayed_free_batch;
 
     assert((arena.delayed_free_count == 0 && SLIST_EMPTY(&free_delayed)) || (arena.delayed_free_count > 0 && !SLIST_EMPTY(&free_delayed)));
 
@@ -352,10 +329,10 @@ salloc(size_t size, const char *what)
 	struct slab_item *item;
 
     assert(arena.delayed_free_count >= 0);
-    if(!delayed_free_mode)
+    if(!arena.delayed_free_mode)
         sfree_delayed_free_now(0);
 
-    size += SIZEOF_ITEM_LIST_ENTRY;
+    size += SIZEOF_ITEM_LIST_ENTRY(&arena);
 	if ((class = class_for(size)) == NULL ||
 	    (slab = slab_of(class)) == NULL) {
 
@@ -372,9 +349,9 @@ salloc(size_t size, const char *what)
 	} else {
         item = SLIST_FIRST(&slab->free);
 		assert(valid_item(slab, item));
-		(void) VALGRIND_MAKE_MEM_DEFINED((void *)item + SIZEOF_ITEM_LIST_ENTRY, sizeof(void *));
+		(void) VALGRIND_MAKE_MEM_DEFINED((void *)item + SIZEOF_ITEM_LIST_ENTRY(&arena), sizeof(void *));
 		SLIST_REMOVE_HEAD(&slab->free, next);
-		(void) VALGRIND_MAKE_MEM_UNDEFINED((void *)item + SIZEOF_ITEM_LIST_ENTRY, sizeof(void *));
+		(void) VALGRIND_MAKE_MEM_UNDEFINED((void *)item + SIZEOF_ITEM_LIST_ENTRY(&arena), sizeof(void *));
 	}
 
 
@@ -386,12 +363,13 @@ salloc(size_t size, const char *what)
 	slab->used += class->item_size + sizeof(red_zone);
 	slab->items += 1;
 
-	VALGRIND_MALLOCLIKE_BLOCK((void *)item + SIZEOF_ITEM_LIST_ENTRY, class->item_size, sizeof(red_zone), 0);
-	return (void *)item + SIZEOF_ITEM_LIST_ENTRY;
+	VALGRIND_MALLOCLIKE_BLOCK((void *)item + SIZEOF_ITEM_LIST_ENTRY(&arena), class->item_size, sizeof(red_zone), 0);
+	return (void *)item + SIZEOF_ITEM_LIST_ENTRY(&arena);
 }
 
 void salloc_delayed_free_mode(bool mode) {
-    delayed_free_mode = mode;
+    if(arena.shared)
+        arena.delayed_free_mode = mode;
 }
 
 void
@@ -409,20 +387,20 @@ void
 sfree(void *ptr)
 {
     assert(arena.delayed_free_count >= 0);
-    if(!delayed_free_mode)
+    if(!arena.delayed_free_mode)
         sfree_delayed_free_now(0);
 
 	if (ptr == NULL)
 		return;
 
-    if(delayed_free_mode)
+    if(arena.delayed_free_mode)
         return sfree_delayed(ptr);
 
     return sfree_do(ptr);
 }
 
 void sfree_do(void *ptr) {
-	struct slab_item *item = ptr - SIZEOF_ITEM_LIST_ENTRY;
+	struct slab_item *item = ptr - SIZEOF_ITEM_LIST_ENTRY(&arena);
 	struct slab *slab = slab_header(item);
 	struct slab_class *class = slab->class;
 

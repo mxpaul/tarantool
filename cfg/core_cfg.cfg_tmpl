@@ -32,10 +32,10 @@ slab_alloc_minimal=64, ro
 # Growth factor, each subsequent unit size is factor * prev unit size
 slab_alloc_factor=2.0, ro
 
-# File pointing to memory (tmpfs, hugetlbfs) (target fs must have at least slab_alloc_arena GB of free space)
-slab_arena_filename="", ro
+# Use shared arena, this reduces fork() time for additional sizeof(void*) bytes of space per each tuple
+slab_arena_shared=0, ro
 
-# After save snapshot2, memory will be freed in a batch of
+# After save snapshot, if slab_arena_shared == 1, memory will be freed in a batch of
 slab_delayed_free_batch=1000
 
 # working directory (daemon will chdir(2) to it)
