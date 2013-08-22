@@ -69,6 +69,7 @@ static const char *help =
 	" - show plugins" CRLF
 	" - save coredump" CRLF
 	" - save snapshot" CRLF
+	" - save snapshot2" CRLF
 	" - lua command" CRLF
 	" - reload configuration" CRLF
 	" - show injections (debug mode only)" CRLF
@@ -83,6 +84,8 @@ static const char *unknown_command = "unknown command. try typing help." CRLF;
 
 struct salloc_stat_admin_cb_ctx {
 	int64_t total_used;
+	int64_t total_used_real;
+	int64_t total_alloc_real;
 	struct tbuf *out;
 };
 
@@ -92,16 +95,18 @@ salloc_stat_admin_cb(const struct slab_cache_stats *cstat, void *cb_ctx)
 	struct salloc_stat_admin_cb_ctx *ctx = (struct salloc_stat_admin_cb_ctx *) cb_ctx;
 
 	tbuf_printf(ctx->out,
-		    "     - { item_size: %- 5i, slabs: %- 3i, items: %- 11" PRIi64
-		    ", bytes_used: %- 12" PRIi64
-		    ", bytes_free: %- 12" PRIi64 " }" CRLF,
+		    "     - { item_size: %6i, slabs: %6i, items: %11" PRIi64
+		    ", bytes_used: %12" PRIi64 ", waste: %5.2f%%"
+		    ", bytes_free: %12" PRIi64 " }" CRLF,
 		    (int)cstat->item_size,
 		    (int)cstat->slabs,
 		    cstat->items,
-		    cstat->bytes_used,
+		    cstat->bytes_used, (double)(cstat->bytes_alloc_real - cstat->bytes_used_real)*100 / cstat->bytes_alloc_real,
 		    cstat->bytes_free);
 
 	ctx->total_used += cstat->bytes_used;
+	ctx->total_alloc_real += cstat->bytes_alloc_real;
+	ctx->total_used_real += cstat->bytes_used_real;
 	return 0;
 }
 
@@ -112,6 +117,8 @@ show_slab(struct tbuf *out)
 	struct slab_arena_stats astat;
 
 	cb_ctx.total_used = 0;
+	cb_ctx.total_used_real = 0;
+	cb_ctx.total_alloc_real = 0;
 	cb_ctx.out = out;
 
 	tbuf_printf(out, "slab statistics:\n  classes:" CRLF);
@@ -122,6 +129,14 @@ show_slab(struct tbuf *out)
 		(double)cb_ctx.total_used / astat.size * 100);
 	tbuf_printf(out, "  arena_used: %.2f%%" CRLF,
 		(double)astat.used / astat.size * 100);
+    tbuf_printf(out, "  waste: %.2f%%" CRLF,
+                (double)(cb_ctx.total_alloc_real - cb_ctx.total_used_real) / cb_ctx.total_alloc_real * 100);
+    tbuf_printf(out, "  bytes_waste: %12" PRIi64 CRLF,
+                (i64)((double)cb_ctx.total_used*(cb_ctx.total_alloc_real - cb_ctx.total_used_real) / cb_ctx.total_alloc_real));
+    tbuf_printf(out, "  delayed_free_size: %" PRIi64 CRLF,
+                astat.delayed_free_size);
+    tbuf_printf(out, "  delayed_free_count: %" PRIi64 CRLF,
+                astat.delayed_free_count);
 }
 
 static void

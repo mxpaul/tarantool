@@ -280,6 +280,7 @@ reload_cfg(struct tbuf *out)
 	/* All OK, activate the config. */
 	swap_tarantool_cfg(&cfg, &new_cfg);
 	tarantool_lua_load_cfg(tarantool_L, &cfg);
+        salloc_delayed_free_batch(cfg.slab_delayed_free_batch);
 
 	return 0;
 }
@@ -318,19 +319,26 @@ tarantool_uptime(void)
 }
 
 int
-snapshot(void)
+snapshot()
 {
 	if (snapshot_pid)
 		return EINPROGRESS;
 
-	pid_t p = fork();
+    salloc_delayed_free_mode(1);
+
+    pid_t p = fork();
+
 	if (p < 0) {
 		say_syserror("fork");
 		return -1;
 	}
+
 	if (p > 0) {
 		snapshot_pid = p;
+        say_warn("waiting for dumper %d", p);
 		int status = wait_for_child(p);
+        say_warn("dumper finished %d", p);
+        salloc_delayed_free_mode(0);
 		snapshot_pid = 0;
 		return (WIFSIGNALED(status) ? EINTR : WEXITSTATUS(status));
 	}
@@ -342,13 +350,13 @@ snapshot(void)
 	 * Safety: make sure we don't double-write
 	 * parent stdio buffers at exit().
 	 */
+
 	close_all_xcpt(1, sayfd);
+    salloc_reattach();
+
 	snapshot_save(recovery_state, box_snapshot);
-
-	exit(EXIT_SUCCESS);
-	return 0;
+    _exit(0);
 }
-
 
 /**
 * Create snapshot from signal handler (SIGUSR1)
@@ -622,7 +630,7 @@ tarantool_free(void)
 static void
 initialize_minimal()
 {
-	if (!salloc_init(64 * 1000 * 1000, 4, 2))
+	if (!salloc_init(64 * 1000 * 1000, 4, 2, 0))
 		panic_syserror("can't initialize slab allocator");
 	fiber_init();
 	coeio_init();
@@ -842,8 +850,11 @@ main(int argc, char **argv)
 	fiber_init();
 	replication_prefork();
 	coeio_init();
-	salloc_init(cfg.slab_alloc_arena * (1 << 30) /* GB */,
-		    cfg.slab_alloc_minimal, cfg.slab_alloc_factor);
+	if(!salloc_init(cfg.slab_alloc_arena * (1 << 30) /* GB */,
+		    cfg.slab_alloc_minimal, cfg.slab_alloc_factor, cfg.slab_arena_shared)} {
+		panic_syserror("can't initialize slab allocator");
+	}
+	salloc_delayed_free_batch(cfg.slab_delayed_free_batch);
 
 	signal_init();
 
@@ -880,6 +891,7 @@ main(int argc, char **argv)
 		say_crit("entering event loop");
 		if (cfg.io_collect_interval > 0)
 			ev_set_io_collect_interval(cfg.io_collect_interval);
+
 		ev_now_update();
 		start_time = ev_now();
 		ev_loop(0);

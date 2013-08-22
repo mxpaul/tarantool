@@ -117,6 +117,139 @@ process_ro(struct port *port, uint32_t op, const char *reqdata, uint32_t reqlen)
 }
 
 static void
+box_xlog_sprint(struct tbuf *buf, const struct tbuf *t)
+{
+	struct header_v11 *row = header_v11(t);
+
+	struct tbuf *b = palloc(buf->pool, sizeof(*b));
+	b->data = t->data + sizeof(struct header_v11);
+	b->size = row->len;
+	u16 tag, op;
+	u64 cookie;
+	struct sockaddr_in *peer = (void *)&cookie;
+
+	u32 n, key_len;
+	void *key;
+	u32 field_count, field_no;
+	u32 flags;
+	u32 op_cnt;
+
+	tbuf_printf(buf, "lsn:%" PRIi64 " ", row->lsn);
+
+	say_debug("b->len:%" PRIu32, b->size);
+
+	tag = read_u16(b);
+	cookie = read_u64(b);
+	op = read_u16(b);
+	n = read_u32(b);
+
+	tbuf_printf(buf, "tm:%.3f t:%" PRIu16 " %s:%d %s n:%i ",
+		    row->tm, tag, inet_ntoa(peer->sin_addr), ntohs(peer->sin_port),
+		    requests_strs[op], n);
+
+	switch (op) {
+	case REPLACE:
+		flags = read_u32(b);
+		field_count = read_u32(b);
+		if (b->size != valid_tuple(b, field_count)) {
+			say_error("found a corrupt tuple, %s",
+				  tbuf_str(buf));
+			abort();
+		}
+		tuple_print(buf, field_count, b->data);
+		break;
+
+	case DELETE:
+		flags = read_u32(b);
+	case DELETE_1_3:
+		key_len = read_u32(b);
+		key = read_field(b);
+		if (b->size != 0) {
+			say_error("found a corrupt tuple %s", tbuf_str(buf));
+			abort();
+		}
+		tuple_print(buf, key_len, key);
+		break;
+
+	case UPDATE:
+		flags = read_u32(b);
+		key_len = read_u32(b);
+		key = read_field(b);
+		op_cnt = read_u32(b);
+
+		tbuf_printf(buf, "flags:%08X ", flags);
+		tuple_print(buf, key_len, key);
+
+		while (op_cnt-- > 0) {
+			field_no = read_u32(b);
+			u8 op = read_u8(b);
+			void *arg = read_field(b);
+
+			tbuf_printf(buf, " [field_no:%i op:", field_no);
+			switch (op) {
+			case 0:
+				tbuf_printf(buf, "set ");
+				break;
+			case 1:
+				tbuf_printf(buf, "add ");
+				break;
+			case 2:
+				tbuf_printf(buf, "and ");
+				break;
+			case 3:
+				tbuf_printf(buf, "xor ");
+				break;
+			case 4:
+				tbuf_printf(buf, "or ");
+				break;
+			}
+			tuple_print(buf, 1, arg);
+			tbuf_printf(buf, "] ");
+		}
+		break;
+	default:
+		tbuf_printf(buf, "unknown wal op %" PRIi32, op);
+	}
+}
+
+static int
+snap_print(void *param __attribute__((unused)), struct tbuf *t)
+{
+	@try {
+		struct tbuf *out = tbuf_alloc(t->pool);
+		struct header_v11 *raw_row = header_v11(t);
+		struct tbuf *b = palloc(t->pool, sizeof(*b));
+		b->data = t->data + sizeof(struct header_v11);
+		b->size = raw_row->len;
+
+		(void)read_u16(b); /* drop tag */
+		(void)read_u64(b); /* drop cookie */
+
+		struct box_snap_row *row =  box_snap_row(b);
+
+		tuple_print(out, row->tuple_size, row->data);
+		printf("n:%i %*s\n", row->space, (int) out->size,
+		       (char *)out->data);
+	} @catch (id e) {
+		return -1;
+	}
+	return 0;
+}
+
+static int
+xlog_print(void *param __attribute__((unused)), struct tbuf *t)
+{
+	@try {
+		struct tbuf *out = tbuf_alloc(t->pool);
+		box_xlog_sprint(out, t);
+		printf("%*s\n", (int)out->size, (char *)out->data);
+	} @catch (id e) {
+		return -1;
+	}
+	return 0;
+}
+
+static void
 recover_snap_row(const void *data)
 {
 	const struct box_snap_row *row = (const struct box_snap_row *) data;

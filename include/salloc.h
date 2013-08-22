@@ -34,25 +34,30 @@
 
 struct tbuf;
 
-bool salloc_init(size_t size, size_t minimal, double factor);
+bool salloc_init(size_t size, size_t minimal, double factor, bool sharedmem);
 void salloc_free(void);
 void *salloc(size_t size, const char *what);
 void sfree(void *ptr);
 void slab_validate();
 
 /** Statistics on utilization of a single slab class. */
+<<<<<<< HEAD
 struct slab_cache_stats {
 	int64_t item_size;
 	int64_t slabs;
 	int64_t items;
 	int64_t bytes_used;
 	int64_t bytes_free;
+	int64_t bytes_used_real;
+	int64_t bytes_alloc_real;
 };
 
 /** Statistics on utilization of the slab allocator. */
 struct slab_arena_stats {
 	size_t size;
 	size_t used;
+	i64 delayed_free_size;
+	i64 delayed_free_count;
 };
 
 typedef int (*salloc_stat_cb)(const struct slab_cache_stats *st, void *ctx);
@@ -88,5 +93,8 @@ salloc_ptr_to_index(void *ptr);
  */
 void *
 salloc_ptr_from_index(size_t index);
+
+void salloc_delayed_free_mode(bool mode);
+void salloc_delayed_free_batch(size_t batch);
 
 #endif /* TARANTOOL_SALLOC_H_INCLUDED */

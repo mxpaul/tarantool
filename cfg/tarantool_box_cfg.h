@@ -85,6 +85,12 @@ typedef struct tarantool_cfg {
 	/* Growth factor, each subsequent unit size is factor * prev unit size */
 	double	slab_alloc_factor;
 
+	/* Use shared memory for arena */
+	bool slab_arena_shared;
+
+	/* After save snapshot2, memory will be freed in a batch of */
+	int32_t	slab_delayed_free_batch;
+
 	/* working directory (daemon will chdir(2) to it) */
 	char*	work_dir;
 
