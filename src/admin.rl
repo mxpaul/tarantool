@@ -55,6 +55,7 @@ extern "C" {
 #include "lua/init.h"
 #include "session.h"
 #include "scoped_guard.h"
+#include "box/space.h"
 
 static const char *help =
 	"available commands:" CRLF
@@ -63,6 +64,7 @@ static const char *help =
 	" - show info" CRLF
 	" - show fiber" CRLF
 	" - show configuration" CRLF
+	" - show index" CRLF
 	" - show slab" CRLF
 	" - show palloc" CRLF
 	" - show stat" CRLF
@@ -165,6 +167,31 @@ fail(struct tbuf *out, struct tbuf *err)
 	start(out);
 	tbuf_printf(out, "fail:%.*s" CRLF, err->size, (char *)err->data);
 	end(out);
+}
+
+static void
+index_info(struct tbuf *out)
+{
+	tbuf_printf(out, "index_info:" CRLF);
+    struct space_stat *stat = space_stat();
+    int sp_i = 0;
+    i64 total_size = 0;
+    while(stat[sp_i].n >= 0) {
+        tbuf_printf(out, "  - space_no: %" PRIi32 CRLF, stat[sp_i].n);
+        tbuf_printf(out, "    index: " CRLF);
+        int i = 0;
+        i64 sp_size = 0;
+        while(stat[sp_i].index[i].n >= 0) {
+            tbuf_printf(out, "      - { n: %3d, keys: %15" PRIi64 ", memsize: %15" PRIi64 " }" CRLF,
+                        stat[sp_i].index[i].n, stat[sp_i].index[i].keys, stat[sp_i].index[i].memsize);
+            sp_size += stat[sp_i].index[i].memsize;
+            ++i;
+        }
+        tbuf_printf(out, "    space_indexes_memsize: %15" PRIi64 CRLF, sp_size);
+        total_size += sp_size;
+        ++sp_i;
+    }
+    tbuf_printf(out, "total_indexes_memsize:     %15" PRIi64 CRLF, total_size);
 }
 
 static void
@@ -293,6 +320,7 @@ admin_dispatch(struct ev_io *coio, struct iobuf *iobuf, lua_State *L)
 		eol = "\n" | "\r\n";
 		show = "sh"("o"("w")?)?;
 		info = "in"("f"("o")?)?;
+		index = ("ind"("e"("x")?)? | "idx");
 		check = "ch"("e"("c"("k")?)?)?;
 		configuration = "co"("n"("f"("i"("g"("u"("r"("a"("t"("i"("o"("n")?)?)?)?)?)?)?)?)?)?)?;
 		fiber = "fi"("b"("e"("r")?)?)?;
@@ -324,6 +352,7 @@ admin_dispatch(struct ev_io *coio, struct iobuf *iobuf, lua_State *L)
 			    exit			%{return -1;}					|
 			    lua  " "+ string		%lua						|
 			    show " "+ info		%{start(out); tarantool_info(out); end(out);}	|
+			    show " "+ index		%{start(out); index_info(out); end(out);}	|
 			    show " "+ fiber		%{start(out); fiber_info(out); end(out);}	|
 			    show " "+ configuration 	%show_configuration				|
 			    show " "+ slab		%{start(out); show_slab(out); end(out);}	|

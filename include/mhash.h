@@ -151,6 +151,7 @@ void _mh(reserve)(struct _mh(t) *h, mh_int_t size,
 		  mh_arg_t arg);
 void __attribute__((noinline)) _mh(del_resize)(struct _mh(t) *h, mh_int_t x,
 					       mh_arg_t arg);
+size_t _mh(memsize)(struct _mh(t) *h, mh_int_t buckets);
 void _mh(dump)(struct _mh(t) *h);
 
 #define put_slot(h, node, arg) \
@@ -399,6 +400,32 @@ _mh(delete)(struct _mh(t) *h)
 	free(h->b);
 	free(h->p);
 	free(h);
+}
+
+size_t
+_mh(memsize)(struct _mh(t) *h, mh_int_t buckets)
+{
+    size_t sz = 2*sizeof(struct _mh(t));
+
+    if(buckets > 0) { // estimation
+        mh_int_t prime = 1;
+        while (prime < __ac_HASH_PRIME_SIZE) {
+            if (__ac_prime_list[prime] >= buckets)
+                break;
+            prime += 1;
+        }
+        buckets = __ac_prime_list[prime];
+        //buckets += prime < __ac_HASH_PRIME_SIZE ? __ac_prime_list[prime + 1] : 2*buckets;
+        sz += buckets * sizeof(struct _mh(pair)) + (buckets / 16 + 1) * sizeof(unsigned);
+        return sz;
+    }
+
+    sz += h->n_buckets * sizeof(struct _mh(pair)) + (h->n_buckets / 16 + 1) * sizeof(unsigned);
+    if(h->resize_position) {
+        h = h->shadow;
+        sz += h->n_buckets * sizeof(struct _mh(pair)) + (h->n_buckets / 16 + 1) * sizeof(unsigned);
+    }
+    return sz;
 }
 
 void

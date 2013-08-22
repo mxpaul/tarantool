@@ -204,6 +204,4 @@ private:
 	 * box_process(). Should not be used elsewhere.
 	 */
 	struct iterator *m_position;
-};
-
-#endif /* TARANTOOL_BOX_INDEX_H_INCLUDED */
+}
