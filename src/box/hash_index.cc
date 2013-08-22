@@ -226,8 +226,10 @@ HashIndex::build(Index *pk)
 }
 
 void
-HashIndex::reserve(uint32_t n_tuples)
+HashIndex::reserve(size_t n_tuples) const
 {
+        say_info("HashIndex::reserve(%" PRIu32 ")", n_tuples);
+
 	mh_index_reserve(hash, n_tuples, key_def);
 }
 
@@ -235,6 +237,12 @@ size_t
 HashIndex::size() const
 {
 	return mh_size(hash);
+}
+
+size_t
+HashIndex::memsize(size_t ntuples) const
+{
+        return mh_index_memsize(hash, ntuples);
 }
 
 

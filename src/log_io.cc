@@ -186,6 +186,9 @@ find_including_file(struct log_dir *dir, int64_t target_lsn)
 	if (count <= 0)
 		return count;
 
+    if(target_lsn < *lsn)
+        return *lsn;
+
 	while (count > 1) {
 		if (*lsn <= target_lsn && target_lsn < *(lsn + 1)) {
 			goto out;

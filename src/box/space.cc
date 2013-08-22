@@ -55,6 +55,31 @@ static bool secondary_indexes_enabled = false;
  */
 static bool primary_indexes_enabled = false;
 
+struct space_stat *
+space_stat(struct tbuf* out) {
+	static __thread struct space_stat space_stat[SPACE_STAT_MAX];
+
+	int sp_i = 0;
+        mh_int_t i;
+        mh_foreach(spaces, i) {
+                struct space *sp = (struct space *)
+                                mh_i32ptr_node(spaces, i)->val;
+		space_stat[sp_i].n = space_n(sp);
+		int n = sp->key_count;
+		int i = 0;
+		for (; i < n; i++) {
+			Index *index = sp->index[i];
+			space_stat[sp_i].index[i].n       = i;
+			space_stat[sp_i].index[i].keys    = index->size();
+			space_stat[sp_i].index[i].memsize = index->memsize(0);
+		}
+		space_stat[sp_i].index[i].n = -1;
+		++sp_i;
+	}
+	space_stat[sp_i].n = -1;
+	return space_stat;
+}
+
 
 static void
 space_create(struct space *space, uint32_t space_no,
@@ -228,6 +253,8 @@ space_config()
 		return;
 	}
 
+	int64_t all_spaces_index_sz = 0;
+
 	/* fill box spaces */
 	for (uint32_t i = 0; cfg.space[i] != NULL; ++i) {
 		tarantool_cfg_space *cfg_space = cfg.space[i];
@@ -255,10 +282,22 @@ space_config()
 			auto cfg_index = cfg_space->index[j];
 			key_def_create(&key_defs[j], cfg_index);
 		}
-		(void) space_new(i, key_defs, key_count, arity);
+		struct space * sp = space_new(i, key_defs, key_count, arity);
 
-		say_info("space %i successfully configured", i);
+		int64_t space_index_sz = 0;
+                for (int j = 0; j < sp->key_count; ++j) {
+			Index *index = sp->index[j];
+			if(sp->key_defs[j].type == HASH)
+				index->reserve(cfg_space->estimated_rows);
+
+			int64_t isz = index->memsize(cfg_space->estimated_rows);
+			space_index_sz += isz;
+			say_info("space %i index %i estimated size = %" PRIi64, i, j, isz);
+		}
+		say_info("space %i successfully configured, estimated indexes size = %" PRIi64, i, space_index_sz);
+		all_spaces_index_sz += space_index_sz;
 	}
+	say_info("all spaces estimated indexes size = %" PRIi64, all_spaces_index_sz);
 }
 
 void

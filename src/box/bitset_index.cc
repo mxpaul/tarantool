@@ -138,6 +138,17 @@ BitsetIndex::size() const
 	return bitset_index_size(&index);
 }
 
+void
+BitsetIndex::reserve(size_t ntuples) const
+{
+}
+
+size_t
+BitsetIndex::memsize(size_t nelements) const
+{
+	return 0;
+}
+
 struct tuple *
 BitsetIndex::min() const
 {

@@ -56,7 +56,8 @@ public:
 				  enum iterator_type type,
 				  const char *key, uint32_t part_count) const;
 
-	virtual void reserve(uint32_t n_tuples);
+	virtual void reserve(size_t n_tuples) const;
+	virtual size_t memsize(size_t n_tuples) const;
 
 protected:
 	struct mh_index_t *hash;
