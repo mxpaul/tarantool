@@ -177,6 +177,9 @@ public:
 	virtual struct tuple *replace(struct tuple *old_tuple,
 				      struct tuple *new_tuple,
 				      enum dup_replace_mode mode) = 0;
+
+	virtual size_t memsize(size_t ntuples) const = 0;
+	virtual void reserve(size_t ntuples) const = 0;
 	/**
 	 * Create a structure to represent an iterator. Must be
 	 * initialized separately.
@@ -204,4 +207,5 @@ private:
 	 * box_process(). Should not be used elsewhere.
 	 */
 	struct iterator *m_position;
-}
+};
+#endif

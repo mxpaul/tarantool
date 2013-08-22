@@ -352,10 +352,9 @@ snapshot()
 	 */
 
 	close_all_xcpt(1, sayfd);
-    salloc_reattach();
 
 	snapshot_save(recovery_state, box_snapshot);
-    _exit(0);
+	_exit(0);
 }
 
 /**
@@ -851,7 +850,7 @@ main(int argc, char **argv)
 	replication_prefork();
 	coeio_init();
 	if(!salloc_init(cfg.slab_alloc_arena * (1 << 30) /* GB */,
-		    cfg.slab_alloc_minimal, cfg.slab_alloc_factor, cfg.slab_arena_shared)} {
+		    cfg.slab_alloc_minimal, cfg.slab_alloc_factor, cfg.slab_arena_shared)) {
 		panic_syserror("can't initialize slab allocator");
 	}
 	salloc_delayed_free_batch(cfg.slab_delayed_free_batch);

@@ -224,6 +224,19 @@ TreeIndex::size() const
 	return tree.size;
 }
 
+void
+TreeIndex::reserve(size_t ntuples) const
+{
+}
+
+size_t
+TreeIndex::memsize(size_t nelements) const
+{
+	if(nelements == 0) nelements = tree.max_size;
+	else nelements = 1.2 * nelements;
+        return nelements * (8 + sizeof(struct sptree_index_node));
+}
+
 struct tuple *
 TreeIndex::min() const
 {

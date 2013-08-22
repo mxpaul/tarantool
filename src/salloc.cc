@@ -72,14 +72,14 @@ struct slab_item {
 };
 
 SLIST_HEAD(item_slist_head, slab_item);
-SLIST_HEAD(slab_slist_head, slab);
-TAILQ_HEAD(slab_tailq_head, slab);
 
 struct slab {
 	uint32_t magic;
 	size_t used;
 	size_t items;
-	struct slab_item *free;
+	size_t used_real;
+	size_t alloc_real;
+	struct item_slist_head free;
 	struct slab_cache *cache;
 	void *brk;
 	SLIST_ENTRY(slab) link;
@@ -101,8 +101,8 @@ struct arena {
 	size_t mmap_size;
 
     bool shared;
-    i64 delayed_free_count;
-    i64 delayed_free_size;
+    int64_t delayed_free_count;
+    int64_t delayed_free_size;
     bool delayed_free_mode;
     size_t delayed_free_batch;
 
@@ -117,6 +117,8 @@ static struct slab_cache slab_caches[256];
 static struct arena arena;
 static struct item_slist_head free_delayed;
 static inline size_t SIZEOF_ITEM_LIST_ENTRY(struct arena *arena) { return arena->shared ? sizeof(struct slab_item) : 0; }
+static inline void* PTR_TO_OUTER_PTR(void *ptr) { return ptr + SIZEOF_ITEM_LIST_ENTRY(&arena); }
+static inline void* PTR_TO_INNER_PTR(void *ptr) { return ptr - SIZEOF_ITEM_LIST_ENTRY(&arena); }
 
 static struct slab *
 slab_header(void *ptr)
@@ -309,7 +311,7 @@ valid_item(struct slab *slab, void *item)
 void sfree_do(void* ptr);
 
 void
-sfree_delayed_free_now(i64 batch) {
+sfree_delayed_free_now(int64_t batch) {
     if(batch <= 0)
         batch = arena.delayed_free_batch;
 
@@ -321,7 +323,7 @@ sfree_delayed_free_now(i64 batch) {
         SLIST_REMOVE_HEAD(&free_delayed, next);
         struct slab *slab = slab_header(item);
         --arena.delayed_free_count;
-        arena.delayed_free_size -= slab->class->item_size;
+        arena.delayed_free_size -= slab->cache->item_size;
         sfree_do(item);
     }
 
@@ -362,7 +364,7 @@ salloc(size_t size, const char *what)
 		(void) VALGRIND_MAKE_MEM_UNDEFINED((void *)item + SIZEOF_ITEM_LIST_ENTRY(&arena), sizeof(void *));
 	}
 
-	if (fully_formatted(slab) && SLIST_EMPTY(slab->free))
+	if (fully_formatted(slab) && SLIST_EMPTY(&slab->free))
 		TAILQ_REMOVE(&cache->free_slabs, slab, cache_free_link);
 
 	slab->used_real += size + sizeof(red_zone);
@@ -371,7 +373,7 @@ salloc(size_t size, const char *what)
 	slab->items += 1;
 
 	VALGRIND_MALLOCLIKE_BLOCK((void*)item + SIZEOF_ITEM_LIST_ENTRY(&arena), cache->item_size, sizeof(red_zone), 0);
-	return (void *)item + SIZEOF_ITEM_LIST_ENTRY(&arena);
+	return PTR_TO_OUTER_PTR(item);
 }
 
 void salloc_delayed_free_mode(bool mode) {
@@ -382,23 +384,25 @@ void salloc_delayed_free_mode(bool mode) {
 void
 sfree_delayed(void *ptr)
 {
-	struct slab_item *item = ptr;
+	struct slab_item *item = (struct slab_item *)ptr;
 	struct slab *slab = slab_header(item);
-    assert(valid_item(slab, item));
-    SLIST_INSERT_HEAD(&free_delayed, item, next);
-    ++arena.delayed_free_count;
-    arena.delayed_free_size += slab->cache->item_size;
+	assert(valid_item(slab, item));
+	SLIST_INSERT_HEAD(&free_delayed, item, next);
+	++arena.delayed_free_count;
+	arena.delayed_free_size += slab->cache->item_size;
 }
 
 void
 sfree(void *ptr)
 {
+	if (ptr == NULL)
+		return;
+
+    ptr = PTR_TO_INNER_PTR(ptr);
+
     assert(arena.delayed_free_count >= 0);
     if(!arena.delayed_free_mode)
         sfree_delayed_free_now(0);
-
-	//if (ptr == NULL)
-	//	return;
 
     if(arena.delayed_free_mode)
         return sfree_delayed(ptr);
@@ -411,7 +415,7 @@ void sfree_do(void *ptr) {
 	struct slab_cache *cache = slab->cache;
 	struct slab_item *item = (struct slab_item *) ptr;
 
-	if (fully_formatted(slab) && SLIST_EMPTY(slab->free))
+	if (fully_formatted(slab) && SLIST_EMPTY(&slab->free))
 		TAILQ_INSERT_TAIL(&cache->free_slabs, slab, cache_free_link);
 
 	assert(valid_item(slab, item));
@@ -433,6 +437,7 @@ void sfree_do(void *ptr) {
 size_t
 salloc_ptr_to_index(void *ptr)
 {
+	ptr = PTR_TO_INNER_PTR(ptr);
 	struct slab *slab = slab_header(ptr);
 	struct slab_item *item = (struct slab_item *) ptr;
 	struct slab_cache *clazz = slab->cache;
@@ -468,7 +473,7 @@ salloc_ptr_from_index(size_t index)
 	struct slab_item *item = (struct slab_item *)((char *) brk_start + item_no * clazz->item_size);
 	assert(valid_item(slab, item));
 
-	return (void *) item;
+	return PTR_TO_OUTER_PTR(item);
 }
 
 /**

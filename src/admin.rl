@@ -71,7 +71,6 @@ static const char *help =
 	" - show plugins" CRLF
 	" - save coredump" CRLF
 	" - save snapshot" CRLF
-	" - save snapshot2" CRLF
 	" - lua command" CRLF
 	" - reload configuration" CRLF
 	" - show injections (debug mode only)" CRLF
@@ -134,7 +133,7 @@ show_slab(struct tbuf *out)
     tbuf_printf(out, "  waste: %.2f%%" CRLF,
                 (double)(cb_ctx.total_alloc_real - cb_ctx.total_used_real) / cb_ctx.total_alloc_real * 100);
     tbuf_printf(out, "  bytes_waste: %12" PRIi64 CRLF,
-                (i64)((double)cb_ctx.total_used*(cb_ctx.total_alloc_real - cb_ctx.total_used_real) / cb_ctx.total_alloc_real));
+                (int64_t)((double)cb_ctx.total_used*(cb_ctx.total_alloc_real - cb_ctx.total_used_real) / cb_ctx.total_alloc_real));
     tbuf_printf(out, "  delayed_free_size: %" PRIi64 CRLF,
                 astat.delayed_free_size);
     tbuf_printf(out, "  delayed_free_count: %" PRIi64 CRLF,
@@ -173,14 +172,14 @@ static void
 index_info(struct tbuf *out)
 {
 	tbuf_printf(out, "index_info:" CRLF);
-    struct space_stat *stat = space_stat();
+    struct space_stat *stat = space_stat(out);
     int sp_i = 0;
-    i64 total_size = 0;
+    int64_t total_size = 0;
     while(stat[sp_i].n >= 0) {
         tbuf_printf(out, "  - space_no: %" PRIi32 CRLF, stat[sp_i].n);
         tbuf_printf(out, "    index: " CRLF);
         int i = 0;
-        i64 sp_size = 0;
+        int64_t sp_size = 0;
         while(stat[sp_i].index[i].n >= 0) {
             tbuf_printf(out, "      - { n: %3d, keys: %15" PRIi64 ", memsize: %15" PRIi64 " }" CRLF,
                         stat[sp_i].index[i].n, stat[sp_i].index[i].keys, stat[sp_i].index[i].memsize);

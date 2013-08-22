@@ -56,6 +56,9 @@ public:
 				      struct tuple *new_tuple,
 				      enum dup_replace_mode mode);
 
+	virtual void reserve(size_t ntuples) const;
+	virtual size_t memsize(size_t ntuples) const;
+
 	virtual struct iterator *allocIterator() const;
 	virtual void initIterator(struct iterator *iterator,
 				  enum iterator_type type,

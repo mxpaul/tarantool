@@ -378,7 +378,7 @@ _mh(new)()
 	h->prime = 0;
 	h->n_buckets = __ac_prime_list[h->prime];
 	h->p = (mh_node_t *) calloc(h->n_buckets, sizeof(mh_node_t));
-	h->b = (mh_int_t *) calloc(h->n_buckets / 16 + 1, sizeof(unsigned));
+	h->b = (mh_int_t *) calloc(h->n_buckets / 16 + 1, sizeof(mh_int_t));
 	h->upper_bound = h->n_buckets * MH_DENSITY;
 	return h;
 }
@@ -416,14 +416,14 @@ _mh(memsize)(struct _mh(t) *h, mh_int_t buckets)
         }
         buckets = __ac_prime_list[prime];
         //buckets += prime < __ac_HASH_PRIME_SIZE ? __ac_prime_list[prime + 1] : 2*buckets;
-        sz += buckets * sizeof(struct _mh(pair)) + (buckets / 16 + 1) * sizeof(unsigned);
+        sz += buckets * sizeof(mh_node_t) + (buckets / 16 + 1) * sizeof(mh_int_t);
         return sz;
     }
 
-    sz += h->n_buckets * sizeof(struct _mh(pair)) + (h->n_buckets / 16 + 1) * sizeof(unsigned);
+    sz += h->n_buckets * sizeof(mh_node_t) + (h->n_buckets / 16 + 1) * sizeof(mh_int_t);
     if(h->resize_position) {
         h = h->shadow;
-        sz += h->n_buckets * sizeof(struct _mh(pair)) + (h->n_buckets / 16 + 1) * sizeof(unsigned);
+        sz += h->n_buckets * sizeof(mh_node_t) + (h->n_buckets / 16 + 1) * sizeof(mh_int_t);
     }
     return sz;
 }
@@ -494,7 +494,7 @@ _mh(start_resize)(struct _mh(t) *h, mh_int_t buckets, mh_int_t batch,
 	s->p = (mh_node_t *) malloc(s->n_buckets * sizeof(mh_node_t));
 	if (s->p == NULL)
 		return -1;
-	s->b = (mh_int_t *) calloc(s->n_buckets / 16 + 1, sizeof(unsigned));
+	s->b = (mh_int_t *) calloc(s->n_buckets / 16 + 1, sizeof(mh_int_t));
 	if (s->b == NULL) {
 		free(s->p);
 		s->p = NULL;
