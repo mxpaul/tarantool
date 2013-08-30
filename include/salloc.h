@@ -95,5 +95,6 @@ salloc_ptr_from_index(size_t index);
 
 void salloc_delayed_free_mode(bool mode);
 void salloc_delayed_free_batch(size_t batch);
+bool salloc_reattach();
 
 #endif /* TARANTOOL_SALLOC_H_INCLUDED */

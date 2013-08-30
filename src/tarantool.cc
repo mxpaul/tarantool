@@ -343,6 +343,8 @@ snapshot()
 		return (WIFSIGNALED(status) ? EINTR : WEXITSTATUS(status));
 	}
 
+	salloc_reattach();
+
 	fiber_set_name(fiber, "dumper");
 	set_proc_title("dumper (%" PRIu32 ")", getppid());
 
@@ -495,11 +497,11 @@ signal_init(void)
 
 	sa.sa_handler = sig_fatal_cb;
 
-	if (sigaction(SIGSEGV, &sa, 0) == -1 ||
+	/* if (sigaction(SIGSEGV, &sa, 0) == -1 ||
 	    sigaction(SIGFPE, &sa, 0) == -1) {
 		say_syserror("sigaction");
 		exit(EX_OSERR);
-	}
+	} // */
 
 	sigs = (ev_signal *) palloc(eter_pool, sizeof(ev_signal) * 4);
 	memset(sigs, 0, sizeof(ev_signal) * 4);
