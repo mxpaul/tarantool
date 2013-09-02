@@ -318,6 +318,11 @@ tarantool_uptime(void)
 	return ev_now() - start_time;
 }
 
+void snapshot_exit(int code, void* arg) {
+	fflush(NULL);
+	_exit(code);
+}
+
 int
 snapshot()
 {
@@ -355,8 +360,10 @@ snapshot()
 
 	close_all_xcpt(1, sayfd);
 
+	on_exit(snapshot_exit, NULL);
+
 	snapshot_save(recovery_state, box_snapshot);
-	_exit(0);
+	exit(EXIT_SUCCESS);
 }
 
 /**
