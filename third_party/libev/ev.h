@@ -839,6 +839,8 @@ EV_API_DECL void ev_async_send     (EV_P_ ev_async *w) EV_THROW;
 
 #endif
 
+#include "external.h"
+
 EV_CPP(})
 
 #endif

@@ -145,6 +145,15 @@ if (ENABLE_BACKTRACE AND HAVE_BFD)
     endif()
 endif()
 
+if (ENABLE_DTRACE AND TARGET_OS_FREEBSD)
+        find_library (ELF elf)
+    if (NOT ELF)
+        message (FATAL_ERROR "Not found libelf library, DTrace depended by one")
+    else()
+        set (common_libraries ${common_libraries} ${ELF})
+    endif()
+endif()
+
 set (common_libraries ${common_libraries} PARENT_SCOPE)
 
 add_subdirectory(lib)
@@ -163,6 +172,19 @@ function(tarantool_module mod)
         PROPERTIES COMPILE_FLAGS ${cfg_c_flags}
         GENERATED True)
     unset(cfg_c_flags)
+    if (ENABLE_DTRACE AND NOT TARGET_OS_DARWIN)
+        set(dtrace_obj ${DTRACE_O_DIR}/dtrace_${mod}.o)
+        add_custom_command(OUTPUT ${dtrace_obj}
+            COMMAND ${DTRACE} -G -s ${DTRACE_D_FILE} -o ${dtrace_obj} ${DTRACE_OBJS} 
+        )
+        set_source_files_properties(${dtrace_obj}
+            PROPERTIES
+            EXTERNAL_OBJECT true
+            GENERATED true
+        )
+        set(module_sources ${module_sources} ${dtrace_obj})
+        unset(dtrace_obj)
+    endif()
     add_executable(tarantool_${mod}
         ${module_sources}
         ${CMAKE_SOURCE_DIR}/cfg/tarantool_${mod}_cfg.c)

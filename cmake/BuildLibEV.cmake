@@ -28,6 +28,11 @@ macro(libev_build)
         set(ev_compile_flags "${ev_compile_flags} -DEV_USE_KQUEUE")
     endif()
 
+    if (ENABLE_DTRACE)
+        set(ev_compile_flags "${ev_compile_flags} -DENABLE_DTRACE")
+        dtrace_gen_h(${DTRACE_D_FILE} ${PROJECT_SOURCE_DIR}/third_party/libev/ev_dtrace.h)
+    endif()
+
     list(APPEND ev_link_libraries "m")
     if (TARGET_OS_DEBIAN_FREEBSD)
         # libev depends on librt under kFreeBSD
@@ -42,11 +47,17 @@ macro(libev_build)
 
     add_library(ev STATIC ${libev_src})
 
+    if (ENABLE_DTRACE AND NOT TARGET_OS_DARWIN)
+        dtrace_do_lib(ev tarantool_ev.c.o CMakeFiles/ev.dir/third_party) 
+        set(LIBEV_LIBRARIES ev_dtrace)
+    else()
+        set(LIBEV_LIBRARIES ev)
+    endif()
+
     set_target_properties(ev PROPERTIES COMPILE_FLAGS "${ev_compile_flags}")
     target_link_libraries(ev ${ev_link_libraries})
 
     set(LIBEV_INCLUDE_DIR ${PROJECT_BINARY_DIR}/third_party)
-    set(LIBEV_LIBRARIES ev)
 
     message(STATUS "Use bundled libev includes: "
         "${LIBEV_INCLUDE_DIR}/tarantool_ev.h")
