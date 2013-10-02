@@ -21,6 +21,15 @@
  */
 #cmakedefine ENABLE_GCOV 1
 /*
+ * Defined if configured with ENABLE_DTRACE
+ */
+#cmakedefine ENABLE_DTRACE 1
+/*
+ * Defined if configured with ENABLE_DTRACE_USDT (enable
+ * user probes in Lua)
+ */
+#cmakedefine ENABLE_DTRACE_USDT 1
+/*
  * Defined if configured with ENABLE_TRACE (debug trace into
  * a file specified by TRANTOOL_TRACE environment variable.
  */

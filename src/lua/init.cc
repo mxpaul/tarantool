@@ -58,6 +58,9 @@ extern "C" {
 #include "lua/session.h"
 #include "lua/cjson.h"
 #include "lua/yaml.h"
+#if ENABLE_DTRACE && ENABLE_DTRACE_USDT
+#include "lua/usdt.h"
+#endif
 
 #include <ctype.h>
 #include <sys/time.h>
@@ -563,6 +566,10 @@ tarantool_lua_init()
 	tarantool_lua_socket_init(L);
 	tarantool_lua_session_init(L);
 	tarantool_lua_error_init(L);
+
+	#if ENABLE_DTRACE && ENABLE_DTRACE_USDT
+	tarantool_lua_usdt_init(L);
+	#endif
 
 	/* Load Lua extension */
 	for (const char **s = lua_sources; *s; s++) {

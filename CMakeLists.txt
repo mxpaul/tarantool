@@ -189,6 +189,8 @@ if (ENABLE_DTRACE)
     include(cmake/dtrace.cmake)
 endif()
 
+option(ENABLE_DTRACE_USDT "Enable creating DTrace probes at runtime" OFF)
+
 option(ENABLE_TRACE "Enable debug trace of tarantool_box execution to
 a file specified in TARANTOOL_TRACE environment variable" ON)
 
@@ -293,6 +295,15 @@ else()
     add_definitions("-DCORO_SJLJ")
 endif()
 
+#
+# LibUSDT
+#
+
+if (ENABLE_DTRACE_USDT AND ENABLE_DTRACE)
+    include(BuildLibUSDT)
+    libusdt_build()
+    add_dependencies(build_bundled_libs usdt)
+endif()
 
 #
 # LibGOPT
