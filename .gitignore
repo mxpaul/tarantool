@@ -1,7 +1,6 @@
 _CPack_Packages
 *.a
 *.cbp
-*.d
 *.dylib
 *.gcno
 *.gcda
