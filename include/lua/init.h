@@ -30,6 +30,11 @@
  */
 #include <stddef.h>
 #include <inttypes.h>
+#include <tarantool/types.h> /* enum mp_type */
+
+#if defined(__cplusplus)
+extern "C" {
+#endif /* defined(__cplusplus) */
 
 struct lua_State;
 struct luaL_Reg;
@@ -115,6 +120,7 @@ int luaL_pushnumber64(struct lua_State *L, uint64_t val);
 /**
  * show plugin statistics
  */
+struct tarantool_plugin;
 typedef int (*tarantool_plugin_stat_cb)(struct tarantool_plugin *p, void *cb_ctx);
 
 int plugin_stat(tarantool_plugin_stat_cb cb, void *cb_ctx);
@@ -133,5 +139,55 @@ tarantool_lua_set_out(struct lua_State *L, const struct tbuf *out);
 
 void
 tarantool_lua_dup_out(struct lua_State *L, struct lua_State *child_L);
+
+/**
+ * @brief Allocate a new block of memory with the given size, push onto the
+ * stack a new cdata of type ctypeid with the block address, and returns
+ * this address. Allocated memory is a subject of GC.
+ * CTypeID must be used from FFI at least once.
+ * @param L Lua State
+ * @param ctypeid FFI's CTypeID of this cdata
+ * @param size size to allocate
+ * @sa luaL_checkcdata
+ * @return memory associated with this cdata
+ */
+void *
+luaL_pushcdata(struct lua_State *L, uint32_t ctypeid, uint32_t size);
+
+/**
+ * @brief Checks whether the function argument idx is a cdata
+ * @param L Lua State
+ * @param idx stack index
+ * @param ctypeid FFI's CTypeID of this cdata
+ * @sa luaL_pushcdata
+ * @return memory associated with this cdata
+ */
+void *
+luaL_checkcdata(struct lua_State *L, int idx, uint32_t *ctypeid);
+
+/** A single value on the Lua stack. */
+struct lua_field {
+	union {
+		struct {
+			const char *data;
+			uint32_t len;
+		} sval;
+		int64_t ival;
+		double dval;
+		float fval;
+		bool bval;
+		uint32_t max;        /* MP_ARRAY */
+		uint32_t size;       /* MP_MAP */
+	};
+	enum mp_type type;
+	bool compact;                /* a flag used by YAML serializer */
+};
+
+void
+lua_tofield(lua_State *L, int index, struct lua_field *field);
+
+#if defined(__cplusplus)
+} /* extern "C" */
+#endif /* defined(__cplusplus) */
 
 #endif /* INCLUDES_TARANTOOL_LUA_H */

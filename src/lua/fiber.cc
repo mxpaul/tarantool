@@ -351,6 +351,7 @@ lbox_fiber_statof(struct fiber *f, void *cb_ctx)
 	                  f->coro.stack, f->coro.stack_size, L);
 	lua_settable(L, -3);
 #endif /* ENABLE_BACKTRACE */
+	(void) fiber_backtrace_cb;
 
 	lua_settable(L, -3);
 	return 0;

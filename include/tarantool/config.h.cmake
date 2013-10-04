@@ -83,6 +83,7 @@
 #cmakedefine HAVE_BUILTIN_CLZLL 1
 #cmakedefine HAVE_BUILTIN_POPCOUNT 1
 #cmakedefine HAVE_BUILTIN_POPCOUNTLL 1
+#cmakedefine HAVE_BUILTIN_BSWAP16 1
 #cmakedefine HAVE_BUILTIN_BSWAP32 1
 #cmakedefine HAVE_BUILTIN_BSWAP64 1
 #cmakedefine HAVE_FFSL 1

@@ -33,12 +33,6 @@
 
 /* {{{ Utilities. *************************************************/
 
-struct sptree_index_key_data
-{
-	const char *key;
-	uint32_t part_count;
-};
-
 static inline struct tuple *
 sptree_index_unfold(const void *node)
 {
@@ -67,17 +61,15 @@ sptree_index_node_compare_dup(const void *node_a, const void *node_b,
 }
 
 static int
-sptree_index_node_compare_with_key(const void *key, const void *node,
+sptree_index_node_compare_with_key(const void *rawkey, const void *node,
 				   void *arg)
 {
 	struct key_def *key_def = (struct key_def *) arg;
-	const struct sptree_index_key_data *key_data =
-			(const struct sptree_index_key_data *) key;
+	const char *key = (const char *) rawkey;
 	const struct tuple *tuple = *(const struct tuple **) node;
 
 	/* the result is inverted because arguments are swapped */
-	return -tuple_compare_with_key(tuple, key_data->key,
-				       key_data->part_count, key_def);
+	return -tuple_compare_with_key(tuple, key, key_def);
 }
 
 /* {{{ TreeIndex Iterators ****************************************/
@@ -87,7 +79,7 @@ struct tree_iterator {
 	struct key_def *key_def;
 	sptree_index_compare compare;
 	struct sptree_index_iterator *iter;
-	struct sptree_index_key_data key_data;
+	const char *key;
 };
 
 static void
@@ -131,7 +123,7 @@ tree_iterator_eq(struct iterator *iterator)
 	struct tree_iterator *it = tree_iterator(iterator);
 
 	void *node = sptree_index_iterator_next(it->iter);
-	if (node && it->compare(&it->key_data, node, it->key_def) == 0)
+	if (node && it->compare(it->key, node, it->key_def) == 0)
 		return *(struct tuple **) node;
 
 	return NULL;
@@ -143,7 +135,7 @@ tree_iterator_req(struct iterator *iterator)
 	struct tree_iterator *it = tree_iterator(iterator);
 
 	void *node = sptree_index_iterator_reverse_next(it->iter);
-	if (node && it->compare(&it->key_data, node, it->key_def) == 0)
+	if (node && it->compare(it->key, node, it->key_def) == 0)
 		return *(struct tuple **) node;
 
 	return NULL;
@@ -156,7 +148,7 @@ tree_iterator_lt(struct iterator *iterator)
 
 	void *node ;
 	while ((node = sptree_index_iterator_reverse_next(it->iter)) != NULL) {
-		if (it->compare(&it->key_data, node, it->key_def) != 0) {
+		if (it->compare(it->key, node, it->key_def) != 0) {
 			it->base.next = tree_iterator_le;
 			return *(struct tuple **) node;
 		}
@@ -172,7 +164,7 @@ tree_iterator_gt(struct iterator *iterator)
 
 	void *node;
 	while ((node = sptree_index_iterator_next(it->iter)) != NULL) {
-		if (it->compare(&it->key_data, node, it->key_def) != 0) {
+		if (it->compare(it->key, node, it->key_def) != 0) {
 			it->base.next = tree_iterator_ge;
 			return *(struct tuple **) node;
 		}
@@ -224,14 +216,13 @@ TreeIndex::random(uint32_t rnd) const
 }
 
 struct tuple *
-TreeIndex::findByKey(const char *key, uint32_t part_count) const
+TreeIndex::findByKey(const char *key) const
 {
-	assert(key_def->is_unique && part_count == key_def->part_count);
+	const char *kk = key;
+	assert(key_def->is_unique && mp_array_load(&kk) == key_def->part_count);
+	(void) kk;
 
-	struct sptree_index_key_data key_data;
-	key_data.key = key;
-	key_data.part_count = part_count;
-	void *node = sptree_index_find(&tree, &key_data);
+	void *node = sptree_index_find(&tree, (void *) key);
 	return sptree_index_unfold(node);
 }
 
@@ -284,9 +275,13 @@ TreeIndex::allocIterator() const
 
 void
 TreeIndex::initIterator(struct iterator *iterator, enum iterator_type type,
-			const char *key, uint32_t part_count) const
+			const char *key) const
 {
-	assert (key != NULL || part_count == 0);
+	uint32_t part_count = 0;
+	if (key != NULL) {
+		const char *kk = key;
+		part_count = mp_array_load(&kk);
+	}
 	struct tree_iterator *it = tree_iterator(iterator);
 
 	if (part_count == 0) {
@@ -297,15 +292,14 @@ TreeIndex::initIterator(struct iterator *iterator, enum iterator_type type,
 		type = iterator_type_is_reverse(type) ? ITER_LE : ITER_GE;
 		key = NULL;
 	}
-	it->key_data.key = key;
-	it->key_data.part_count = part_count;
+	it->key = key;
 
 	if (iterator_type_is_reverse(type))
 		sptree_index_iterator_reverse_init_set(&tree, &it->iter,
-						       &it->key_data);
+						       (void *) it->key);
 	else
 		sptree_index_iterator_init_set(&tree, &it->iter,
-					       &it->key_data);
+					       (void *) it->key);
 
 	switch (type) {
 	case ITER_EQ:

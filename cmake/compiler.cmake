@@ -138,6 +138,8 @@ check_c_compiler_flag("-fno-strict-aliasing" CC_HAS_FNO_STRICT_ALIASING)
 check_c_compiler_flag("-Wno-comment" CC_HAS_WNO_COMMENT)
 check_c_compiler_flag("-Wno-parentheses" CC_HAS_WNO_PARENTHESES)
 
+# http://gcc.gnu.org/bugzilla/show_bug.cgi?id=52624
+set(HAVE_BUILTIN_BSWAP16 0)
 if (CMAKE_COMPILER_IS_CLANG OR CMAKE_COMPILER_IS_GNUCC)
     set(HAVE_BUILTIN_CTZ 1)
     set(HAVE_BUILTIN_CTZLL 1)

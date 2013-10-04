@@ -42,14 +42,13 @@
 STRS(requests, REQUESTS);
 
 static const char *
-read_key(const char **reqpos, const char *reqend, uint32_t *key_part_count)
+read_tuple(const char **reqpos, const char *reqend)
 {
-	*key_part_count = pick_u32(reqpos, reqend);
-	const char *key = *key_part_count ? *reqpos : NULL;
-	/* Advance remaining fields of a key */
-	for (uint32_t i = 0; i < *key_part_count; i++)
-		pick_field(reqpos, reqend);
-	return key;
+	const char *tuple = *reqpos;
+	if (mp_pick(reqpos, reqend) != MP_ARRAY)
+		tnt_raise(IllegalParams,
+			  "tuple_new(): tuple must be MsgPack Array");
+	return tuple;
 }
 
 enum dup_replace_mode
@@ -69,10 +68,9 @@ execute_replace(const struct request *request, struct txn *txn,
 
 	struct space *space = space_find(request->r.space_no);
 	const char *tuple = request->r.tuple;
-	uint32_t field_count = pick_u32(&tuple, request->r.tuple_end);
 
-	struct tuple *new_tuple = tuple_new(space->format, field_count,
-					    &tuple, request->r.tuple_end);
+	struct tuple *new_tuple = tuple_new(space->format, &tuple,
+					    request->r.tuple_end);
 	TupleGuard guard(new_tuple);
 	space_validate_tuple(space, new_tuple);
 	enum dup_replace_mode mode = dup_replace_mode(request->flags);
@@ -91,10 +89,8 @@ execute_update(const struct request *request, struct txn *txn,
 	struct space *space = space_find(request->u.space_no);
 	Index *pk = index_find(space, 0);
 	/* Try to find the tuple by primary key. */
-	primary_key_validate(pk->key_def, request->u.key,
-			     request->u.key_part_count);
-	struct tuple *old_tuple = pk->findByKey(request->u.key,
-						request->u.key_part_count);
+	primary_key_validate(pk->key_def, request->u.key);
+	struct tuple *old_tuple = pk->findByKey(request->u.key);
 
 	if (old_tuple == NULL)
 		return;
@@ -136,13 +132,11 @@ execute_select(const struct request *request, struct txn *txn,
 			return;
 
 		/* read key */
-		uint32_t key_part_count;
-		const char *key = read_key(&keys, request->s.keys_end,
-					   &key_part_count);
+		const char *key = read_tuple(&keys, request->s.keys_end);
 
 		struct iterator *it = index->position();
-		key_validate(index->key_def, ITER_EQ, key, key_part_count);
-		index->initIterator(it, ITER_EQ, key, key_part_count);
+		key_validate(index->key_def, ITER_EQ, key);
+		index->initIterator(it, ITER_EQ, key);
 
 		struct tuple *tuple;
 		while ((tuple = it->next(it)) != NULL) {
@@ -172,10 +166,8 @@ execute_delete(const struct request *request, struct txn *txn,
 
 	/* Try to find tuple by primary key */
 	Index *pk = index_find(space, 0);
-	primary_key_validate(pk->key_def, request->d.key,
-			     request->d.key_part_count);
-	struct tuple *old_tuple = pk->findByKey(request->d.key,
-						request->d.key_part_count);
+	primary_key_validate(pk->key_def, request->d.key);
+	struct tuple *old_tuple = pk->findByKey(request->d.key);
 
 	if (old_tuple == NULL)
 		return;
@@ -247,8 +239,7 @@ request_create(struct request *request, uint32_t type, const char *data,
 		request->u.space_no = pick_u32(reqpos, reqend);
 		request->flags |= (pick_u32(reqpos, reqend) &
 				   BOX_ALLOWED_REQUEST_FLAGS);
-		request->u.key = read_key(reqpos, reqend,
-					       &request->u.key_part_count);
+		request->u.key = read_tuple(reqpos, reqend);
 		request->u.key_end = *reqpos;
 		request->u.expr = *reqpos;
 		/* Do not parse the tail, tuple_update will do it */
@@ -262,8 +253,7 @@ request_create(struct request *request, uint32_t type, const char *data,
 			request->flags |= pick_u32(reqpos, reqend) &
 				BOX_ALLOWED_REQUEST_FLAGS;
 		}
-		request->d.key = read_key(reqpos, reqend,
-					    &request->d.key_part_count);
+		request->d.key = read_tuple(reqpos, reqend);
 		request->d.key_end = *reqpos;
 		if (*reqpos != reqend)
 			tnt_raise(IllegalParams, "can't unpack request");
@@ -272,10 +262,9 @@ request_create(struct request *request, uint32_t type, const char *data,
 		request->execute = box_lua_execute;
 		request->flags |= (pick_u32(reqpos, reqend) &
 				   BOX_ALLOWED_REQUEST_FLAGS);
-		request->c.procname = pick_field_str(reqpos, reqend,
-						     &request->c.procname_len);
-		request->c.args = read_key(reqpos, reqend,
-					   &request->c.arg_count);;
+		request->c.procname = mp_str_pick(reqpos, reqend,
+						    &request->c.procname_len);
+		request->c.args = read_tuple(reqpos, reqend);
 		request->c.args_end = *reqpos;
 		if (*reqpos != reqend)
 			tnt_raise(IllegalParams, "can't unpack request");

@@ -260,8 +260,6 @@ s.index.primary:select()
 s:create_index('nodups', 'tree', { unique=true, parts = { 1, 'num'} })
 -- change of non-unique index to unique: same effect
 s.index.year:alter({unique=true})
--- num -> str -> num transition
-box.space['_index']:update({s.n, s.index.year.id}, "=p", 7, 'str')
 s.index.primary:select()
 box.space['_index']:update({s.n, s.index.year.id}, "=p", 7, 'num')
 -- ambiguous field type

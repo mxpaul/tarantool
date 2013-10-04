@@ -78,15 +78,19 @@ key_def_new_from_tuple(struct tuple *tuple)
 
 	struct tuple_iterator it;
 	tuple_rewind(&it, tuple);
-	uint32_t len; /* unused */
 	/* Parts follow part count. */
-	(void) tuple_seek(&it, INDEX_PART_COUNT, &len);
+	(void) tuple_seek(&it, INDEX_PART_COUNT);
 
 	for (uint32_t i = 0; i < part_count; i++) {
 		uint32_t fieldno = tuple_next_u32(&it);
 		const char *field_type_str = tuple_next_cstr(&it);
-		enum field_type field_type =
-			STR2ENUM(field_type, field_type_str);
+		enum field_type field_type;
+		if (strcasecmp(field_type_str, "num64") == 0) {
+			/* NUM64 index is same as NUM */
+			field_type = NUM;
+		} else {
+			field_type = STR2ENUM(field_type, field_type_str);
+		}
 		key_def_set_part(key_def, i, fieldno, field_type);
 	}
 	key_def_check(key_def);
@@ -533,7 +537,7 @@ DropIndex::commit(struct alter_space *alter)
 	if (pk == NULL)
 		return;
 	struct iterator *it = pk->position();
-	pk->initIterator(it, ITER_ALL, NULL, 0);
+	pk->initIterator(it, ITER_ALL, NULL);
 	struct tuple *tuple;
 	while ((tuple = it->next(it)))
 		tuple_ref(tuple, -1);
@@ -770,7 +774,7 @@ AddIndex::alter(struct alter_space *alter)
 	}
 	/* Now deal with any kind of add index during normal operation. */
 	struct iterator *it = pk->position();
-	pk->initIterator(it, ITER_ALL, NULL, 0);
+	pk->initIterator(it, ITER_ALL, NULL);
 	/*
 	 * The index has to be built tuple by tuple, since
 	 * there is no guarantee that all tuples satisfy

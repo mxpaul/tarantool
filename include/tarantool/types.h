@@ -1,5 +1,6 @@
-#ifndef TARANTOOL_BOX_HASH_INDEX_H_INCLUDED
-#define TARANTOOL_BOX_HASH_INDEX_H_INCLUDED
+#ifndef TARANTOOL_TYPES_H_INCLUDED
+#define TARANTOOL_TYPES_H_INCLUDED
+
 /*
  * Redistribution and use in source and binary forms, with or
  * without modification, are permitted provided that the following
@@ -29,29 +30,18 @@
  * SUCH DAMAGE.
  */
 
-#include "index.h"
-
-struct mh_index_t;
-
-class HashIndex: public Index {
-public:
-	HashIndex(struct key_def *key_def);
-	~HashIndex();
-
-	virtual void reserve(uint32_t size_hint);
-	virtual size_t size() const;
-	virtual struct tuple *random(uint32_t rnd) const;
-	virtual struct tuple *findByKey(const char *key) const;
-	virtual struct tuple *replace(struct tuple *old_tuple,
-				      struct tuple *new_tuple,
-				      enum dup_replace_mode mode);
-
-	virtual struct iterator *allocIterator() const;
-	virtual void initIterator(struct iterator *iterator,
-				  enum iterator_type type,
-				  const char *key) const;
-protected:
-	struct mh_index_t *hash;
+enum mp_type {
+	MP_NIL = 0,
+	MP_ARRAY,
+	MP_MAP,
+	MP_BOOL,
+	MP_UINT,
+	MP_INT,
+	MP_FLOAT,
+	MP_DOUBLE,
+	MP_STR,
+	MP_BIN,
+	MP_EXT
 };
 
-#endif /* TARANTOOL_BOX_HASH_INDEX_H_INCLUDED */
+#endif /* TARANTOOL_TYPES_H_INCLUDED */

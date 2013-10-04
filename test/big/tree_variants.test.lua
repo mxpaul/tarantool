@@ -9,20 +9,20 @@ box.insert(box.schema.INDEX_ID, 0, 6, 'i6', 'tree', 1, 5, 6, 'str', 5, 'str', 3,
 
 space = box.space[0]
 
-space:insert(0, '00000000', '00000100', 'Joe', 'Sixpack', 'Drinks', 'Amstel', 'bar', 2000)
-space:insert(1, '00000001', '00000200', 'Joe', 'Sixpack', 'Drinks', 'Heineken', 'bar', 2001)
-space:insert(2, '00000002', '00000200', 'Joe', 'Sixpack', 'Drinks', 'Carlsberg', 'bar', 2002)
-space:insert(3, '00000003', '00000300', 'Joe', 'Sixpack', 'Drinks', 'Corona Extra', 'bar', 2003)
-space:insert(4, '00000004', '00000300', 'Joe', 'Sixpack', 'Drinks', 'Stella Artois', 'bar', 2004)
-space:insert(5, '00000005', '00000300', 'Joe', 'Sixpack', 'Drinks', 'Miller Genuine Draft', 'bar', 2005)
-space:insert(6, '00000006', '00000400', 'John', 'Smoker', 'Hits', 'A Pipe', 'foo', 2006)
-space:insert(7, '00000007', '00000400', 'John', 'Smoker', 'Hits', 'A Bong', 'foo', 2007)
-space:insert(8, '00000008', '00000400', 'John', 'Smoker', 'Rolls', 'A Joint', 'foo', 2008)
-space:insert(9, '00000009', '00000400', 'John', 'Smoker', 'Rolls', 'A Blunt', 'foo', 2009)
+space:insert(0, 0, 100, 'Joe', 'Sixpack', 'Drinks', 'Amstel', 'bar', 2000)
+space:insert(1, 1, 200, 'Joe', 'Sixpack', 'Drinks', 'Heineken', 'bar', 2001)
+space:insert(2, 2, 200, 'Joe', 'Sixpack', 'Drinks', 'Carlsberg', 'bar', 2002)
+space:insert(3, 3, 300, 'Joe', 'Sixpack', 'Drinks', 'Corona Extra', 'bar', 2003)
+space:insert(4, 4, 300, 'Joe', 'Sixpack', 'Drinks', 'Stella Artois', 'bar', 2004)
+space:insert(5, 5, 300, 'Joe', 'Sixpack', 'Drinks', 'Miller Genuine Draft', 'bar', 2005)
+space:insert(6, 6, 400, 'John', 'Smoker', 'Hits', 'A Pipe', 'foo', 2006)
+space:insert(7, 7, 400, 'John', 'Smoker', 'Hits', 'A Bong', 'foo', 2007)
+space:insert(8, 8, 400, 'John', 'Smoker', 'Rolls', 'A Joint', 'foo', 2008)
+space:insert(9, 9, 400, 'John', 'Smoker', 'Rolls', 'A Blunt', 'foo', 2009)
 
 space:select(0, 1)
-space:select(1,'00000002')
-{space:select(2,'00000300')}
+space:select(1, 2)
+{space:select(2,300)}
 {space:select(3, 'Joe', 'Sixpack')}
 {space:select(3, 'John')}
 {space:select(4, 'A Pipe')}
@@ -49,9 +49,9 @@ space:select(1, 6)
 
 -- Test incorrect keys - supplied key field type does not match index type
 -- https://bugs.launchpad.net/tarantool/+bug/1072624
-space:insert('', '00000001', '00000002', '', '', '', '', '', 0)
-space:insert('xxxxxxxx', '00000001', '00000002', '', '', '', '', '', 0)
-space:insert(1, '', '00000002', '', '', '', '', '', 0)
-space:insert(1, 'xxxxxxxxxxx', '00000002', '', '', '', '', '', 0)
+space:insert('', 1, 2, '', '', '', '', '', 0)
+space:insert('xxxxxxxx', 1, 2, '', '', '', '', '', 0)
+space:insert(1, '', 2, '', '', '', '', '', 0)
+space:insert(1, 'xxxxxxxxxxx', 2, '', '', '', '', '', 0)
 
 space:drop()

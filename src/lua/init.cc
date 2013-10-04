@@ -65,6 +65,7 @@ extern "C" {
 #include <dlfcn.h>
 #include <dirent.h>
 #include <stdio.h>
+#include <math.h> /* modf */
 #include "tarantool/plugin.h"
 
 static RLIST_HEAD(loaded_plugins);
@@ -81,8 +82,8 @@ extern "C" {
 struct lua_State *tarantool_L;
 
 /* contents of src/lua/ files */
-extern char uuid_lua[];
-static const char *lua_sources[] = { uuid_lua, NULL };
+extern char uuid_lua[], msgpack_lua[];
+static const char *lua_sources[] = { uuid_lua, msgpack_lua, NULL };
 
 /**
  * Remember the output of the administrative console in the
@@ -142,15 +143,13 @@ tarantool_lua_tointeger64(struct lua_State *L, int idx)
 	}
 	case LUA_TCDATA:
 	{
-		/* Calculate absolute value in the stack. */
-		if (idx < 0)
-			idx = lua_gettop(L) + idx + 1;
-		GCcdata *cd = cdataV(L->base + idx - 1);
-		if (cd->ctypeid != CTID_INT64 && cd->ctypeid != CTID_UINT64) {
+		uint32_t ctypeid = 0;
+		void *cdata = luaL_checkcdata(L, idx, &ctypeid);
+		if (ctypeid != CTID_INT64 && ctypeid != CTID_UINT64) {
 			luaL_error(L,
 				   "lua_tointeger64: unsupported cdata type");
 		}
-		result = *(uint64_t*)cdataptr(cd);
+		result = *(uint64_t*)cdata;
 		break;
 	}
 	default:
@@ -161,26 +160,51 @@ tarantool_lua_tointeger64(struct lua_State *L, int idx)
 	return result;
 }
 
-static GCcdata*
-luaL_pushcdata(struct lua_State *L, CTypeID id, int bits)
+void *
+luaL_pushcdata(struct lua_State *L, uint32_t ctypeid, uint32_t size)
 {
+	/*
+	 * ctypeid is actually has CTypeID type.
+	 * CTypeId is defined somewhere inside luajit's internal headers
+	 * which should not be included in init.h header.
+	 */
+	static_assert(sizeof(ctypeid) == sizeof(CTypeID),
+		      "sizeof(ctypeid) == sizeof(CTypeID)");
 	CTState *cts = ctype_cts(L);
-	CType *ct = ctype_raw(cts, id);
+	CType *ct = ctype_raw(cts, ctypeid);
 	CTSize sz;
-	lj_ctype_info(cts, id, &sz);
-	GCcdata *cd = lj_cdata_new(cts, id, bits);
+	lj_ctype_info(cts, ctypeid, &sz);
+	GCcdata *cd = lj_cdata_new(cts, ctypeid, size);
 	TValue *o = L->top;
 	setcdataV(L, o, cd);
 	lj_cconv_ct_init(cts, ct, sz, (uint8_t *) cdataptr(cd), o, 0);
 	incr_top(L);
-	return cd;
+	return cdataptr(cd);
 }
+
+void *
+luaL_checkcdata(struct lua_State *L, int idx, uint32_t *ctypeid)
+{
+	/* Calculate absolute value in the stack. */
+	if (idx < 0)
+		idx = lua_gettop(L) + idx + 1;
+
+	if (lua_type(L, idx) != LUA_TCDATA) {
+		luaL_error(L, "expected cdata as %d argument", idx);
+		return NULL;
+	}
+
+	GCcdata *cd = cdataV(L->base + idx - 1);
+	*ctypeid = cd->ctypeid;
+	return (void *)cdataptr(cd);
+}
+
 
 int
 luaL_pushnumber64(struct lua_State *L, uint64_t val)
 {
-	GCcdata *cd = luaL_pushcdata(L, CTID_UINT64, 8);
-	*(uint64_t*)cdataptr(cd) = val;
+	void *cdata = luaL_pushcdata(L, CTID_UINT64, sizeof(uint64_t));
+	*(uint64_t*) cdata = val;
 	return 1;
 }
 
@@ -634,9 +658,9 @@ extern "C" {
 	int yamlL_encode(lua_State*);
 };
 
-void
-tarantool_lua(struct lua_State *L,
-              struct tbuf *out, const char *str)
+
+static void
+tarantool_lua_do(struct lua_State *L, struct tbuf *out, const char *str)
 {
 	tarantool_lua_set_out(L, out);
 	int r = tarantool_lua_dostring(L, str);
@@ -684,7 +708,21 @@ tarantool_lua(struct lua_State *L,
 	lua_replace(L, 1);
 	lua_pop(L, 1);
 	tbuf_printf(out, "%s", lua_tostring(L, 1));
+
 	lua_settop(L, 0);
+}
+
+void
+tarantool_lua(struct lua_State *L,
+	      struct tbuf *out, const char *str)
+{
+	try {
+		tarantool_lua_do(L, out, str);
+	} catch (...) {
+		const char *err = lua_tostring(L, -1);
+		tbuf_printf(out, "---\n- error: %s\n...\n", err);
+		lua_settop(L, 0);
+	}
 }
 
 /**
@@ -884,4 +922,215 @@ lua_region_alloc(void *ctx, size_t size)
 {
 	struct lua_State *L = (struct lua_State *) ctx;
 	return lua_newuserdata(L, size);
+}
+
+static void
+lua_field_inspect_table(struct lua_State *L, int idx, struct lua_field *field)
+{
+	assert(lua_istable(L, idx));
+	bool userdefined = false;
+
+	/* Calculate absolute value in the stack. */
+	if (idx < 0)
+		idx = lua_gettop(L) + idx + 1;
+
+	uint32_t size = 0;
+	uint32_t max = 0;
+	field->type = MP_ARRAY;
+
+	/* Calculate size and check that table can represent an array */
+	lua_pushnil(L);  /* first key */
+	for (uint32_t i = 0; lua_next(L, idx) != 0; i++) {
+		lua_pop(L, 1); /* value */
+		++size;
+		if (field->type != MP_ARRAY)
+			continue;
+
+		if (lua_type(L, -1) != LUA_TNUMBER) {
+			field->type = MP_MAP;
+			continue;
+		}
+
+		uint32_t key = lua_tointeger(L, -1);
+		max = MAX(max, key);
+	}
+
+	/* Always handle zero-indexed arrays as a map */
+	lua_rawgeti(L, idx, 0);
+	if (!lua_isnil(L, -1))
+		field->type = MP_MAP;
+	lua_pop(L, 1);
+
+	if (lua_getmetatable(L, idx)) {
+		lua_pushliteral(L, "_serializer_type");
+		lua_rawget(L, -2);
+		if (lua_isstring(L, -1)) {
+			const char *s = lua_tostring(L, -1);
+			if (!strcmp(s, "arr") || !strcmp(s, "array") ||
+			    !strcmp(s, "seq") || !strcmp(s, "sequence")) {
+				if (field->type != MP_ARRAY)
+					luaL_error(L, "the table cannot be "
+						   "encoded as an array");
+			} else if (!strcmp(s, "map") || !strcmp(s, "mapping")) {
+				/* map */
+				field->type = MP_MAP;
+			} else {
+				luaL_error(L, "Unknown '_serializer_type': %u",
+					   s);
+				return;
+			}
+			userdefined = true;
+		}
+
+		lua_pop(L, 1); /* pop value */
+
+		lua_pushliteral(L, "_serializer_compact");
+		lua_rawget(L, -2);
+		if (lua_isboolean(L, -1) && lua_toboolean(L, -1))
+			field->compact = true;
+
+		lua_pop(L, 1); /* pop value and metatable */
+
+		lua_pop(L, 1); /* pop metatable */
+	}
+
+	if (!userdefined) {
+		enum { DENSITY_FACTOR = 10 };
+		if (field->type == MP_ARRAY && size < max / DENSITY_FACTOR)
+			field->type = MP_MAP;
+	}
+
+	if (field->type == MP_ARRAY) {
+		field->max = max;
+	} else {
+		field->size = size;
+	}
+}
+
+/**
+ * Convert a value on the lua stack to a Tarantool data type.
+ */
+void
+lua_tofield(lua_State *L, int index, struct lua_field *field)
+{
+	memset(field, 0, sizeof(*field));
+	if (index < 0)
+		index = lua_gettop(L) + index + 1;
+
+	double num;
+	double intpart;
+	size_t size;
+
+	switch (lua_type(L, index)) {
+	case LUA_TNUMBER:
+		num = lua_tonumber(L, index);
+		if (modf(num, &intpart) != 0.0) {
+			field->type = MP_DOUBLE;
+			field->dval = num;
+		} else if (num >= 0 && num <= UINT64_MAX) {
+			field->type = MP_UINT;
+			field->ival = (uint64_t) num;
+		} else if (num >= INT64_MIN && num <= INT64_MAX) {
+			field->type = MP_INT;
+			field->ival = (int64_t) num;
+		} else {
+			field->type = MP_DOUBLE;
+			field->dval = num;
+		}
+		return;
+	case LUA_TCDATA:
+	{
+		uint32_t ctypeid = 0;
+		void *cdata = luaL_checkcdata(L, index, &ctypeid);
+		int64_t ival;
+		switch (ctypeid) {
+		case CTID_BOOL:
+			field->type = MP_BOOL;
+			field->bval = *(bool*) cdata;
+			return;
+		case CTID_CCHAR:
+		case CTID_INT8:
+			ival = *(int8_t *) cdata;
+			field->type = (ival > 0) ? MP_UINT : MP_INT;
+			field->ival = ival;
+			return;
+		case CTID_INT16:
+			ival = *(int16_t *) cdata;
+			field->type = (ival > 0) ? MP_UINT : MP_INT;
+			field->ival = ival;
+			return;
+		case CTID_INT32:
+			ival = *(int32_t *) cdata;
+			field->type = (ival > 0) ? MP_UINT : MP_INT;
+			field->ival = ival;
+			return;
+		case CTID_INT64:
+			ival = *(int64_t *) cdata;
+			field->type = (ival > 0) ? MP_UINT : MP_INT;
+			field->ival = ival;
+			return;
+		case CTID_UINT8:
+			field->type = MP_UINT;
+			field->ival = *(uint8_t *) cdata;
+			return;
+		case CTID_UINT16:
+			field->type = MP_UINT;
+			field->ival = *(uint16_t *) cdata;
+			return;
+		case CTID_UINT32:
+			field->type = MP_UINT;
+			field->ival = *(uint32_t *) cdata;
+			return;
+		case CTID_UINT64:
+			field->type = MP_UINT;
+			field->ival = *(uint64_t *) cdata;
+			return;
+		case CTID_FLOAT:
+			field->type = MP_FLOAT;
+			field->fval = *(float *) cdata;
+			return;
+		case CTID_DOUBLE:
+			field->type = MP_DOUBLE;
+			field->dval = *(double *) cdata;
+			return;
+		case CTID_P_VOID:
+			if (*(void **) cdata == NULL) {
+				field->type = MP_NIL;
+				return;
+			}
+			/* Fall through */
+		default:
+			field->type = MP_EXT;
+			return;
+		}
+		return;
+	}
+	case LUA_TBOOLEAN:
+		field->type = MP_BOOL;
+		field->bval = lua_toboolean(L, index);
+		return;
+	case LUA_TNIL:
+		field->type = MP_NIL;
+		return;
+	case LUA_TSTRING:
+		field->sval.data = lua_tolstring(L, index, &size);
+		field->sval.len = (uint32_t) size;
+		field->type = MP_STR;
+		return;
+	case LUA_TTABLE:
+	{
+		lua_field_inspect_table(L, index, field);
+		return;
+	}
+	case LUA_TLIGHTUSERDATA:
+	case LUA_TUSERDATA:
+		if (lua_touserdata(L, index) == NULL) {
+			field->type = MP_NIL;
+			return;
+		}
+		/* Fall through */
+	default:
+		field->type = MP_EXT;
+		return;
+	}
 }

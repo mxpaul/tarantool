@@ -91,19 +91,16 @@ struct iterator {
  * @param key_def key definition
  * @param type iterator type (see enum iterator_type)
  * @param key BER-encoded key
- * @param part_count number of parts in \a key
  */
 void
-key_validate(struct key_def *key_def, enum iterator_type type, const char *key,
-	     uint32_t part_count);
+key_validate(struct key_def *key_def, enum iterator_type type, const char *key);
 
 /**
  * Check that the supplied key is valid for a search in a unique
  * index (i.e. the key must be fully specified).
  */
 void
-primary_key_validate(struct key_def *key_def, const char *key,
-		     uint32_t part_count);
+primary_key_validate(struct key_def *key_def, const char *key);
 
 
 /**
@@ -168,7 +165,7 @@ public:
 	virtual struct tuple *min() const;
 	virtual struct tuple *max() const;
 	virtual struct tuple *random(uint32_t rnd) const;
-	virtual struct tuple *findByKey(const char *key, uint32_t part_count) const = 0;
+	virtual struct tuple *findByKey(const char *key) const = 0;
 	virtual struct tuple *findByTuple(struct tuple *tuple) const;
 	virtual struct tuple *replace(struct tuple *old_tuple,
 				      struct tuple *new_tuple,
@@ -180,7 +177,7 @@ public:
 	virtual struct iterator *allocIterator() const = 0;
 	virtual void initIterator(struct iterator *iterator,
 				  enum iterator_type type,
-				  const char *key, uint32_t part_count) const = 0;
+				  const char *key) const = 0;
 
 	inline struct iterator *position()
 	{

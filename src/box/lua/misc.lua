@@ -24,7 +24,7 @@ function box.counter.inc(space, ...)
         if tuple ~= nil then break end
     end
 
-    return box.unpack('i', tuple[cnt_index])
+    return tuple[cnt_index]
 end
 
 --
@@ -38,12 +38,12 @@ function box.counter.dec(space, ...)
 
     local tuple = box.select(space, 0, ...)
     if tuple == nil then return 0 end
-    if box.unpack('i', tuple[cnt_index]) == 1 then
+    if tuple[cnt_index] == 1 then
         box.delete(space, ...)
         return 0
     else
         tuple = box.update(space, key, '-p', cnt_index, 1)
-        return box.unpack('i', tuple[cnt_index])
+        return tuple[cnt_index]
     end
 end
 
@@ -57,14 +57,6 @@ function box.auto_increment(spaceno, ...)
     local max = 0
     if max_tuple ~= nil then
         max = max_tuple[0]
-        local fmt = 'i'
-        if #max == 8 then fmt = 'l' end
-        max = box.unpack(fmt, max)
-    else
-        -- first time
-        if box.space[spaceno].index[0].key_field[0].type == "NUM64" then
-            max = tonumber64(max)
-        end
     end
     return box.insert(spaceno, max + 1, ...)
 end
