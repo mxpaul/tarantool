@@ -10,3 +10,6 @@
 [submodule "third_party/lua-usdt"]
 	path = third_party/lua-usdt
 	url = https://github.com/chrisa/lua-usdt.git
+[submodule "third_party/libusdt"]
+	path = third_party/libusdt
+	url = https://github.com/chrisa/libusdt.git
