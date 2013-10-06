@@ -1,4 +1,22 @@
 macro(libusdt_build)
+    enable_language(ASM)
+
+    if (TARGET_OS_FREEBSD)
+        # Depends by FreeBSD src because dtrace.h not in /usr/include/sys
+        include_directories(
+            /usr/src/sys/cddl/compat/opensolaris
+            /usr/src/sys/cddl/contrib/opensolaris/uts/common
+        )
+    endif()
+
+    set(usdt_cflags "-fPIC")
+
+    if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "amd64")
+        set(usdt_trace_arch "x86_64")
+    else()
+        set(usdt_trace_arch ${CMAKE_SYSTEM_PROCESSOR})
+    endif()
+
     set(usdt_src_dir ${PROJECT_SOURCE_DIR}/third_party/libusdt) 
     set(usdt_src
         ${usdt_src_dir}/usdt.c
@@ -15,11 +33,14 @@ macro(libusdt_build)
     set(LIBUSDT_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/third_party/libusdt)
     include_directories(${LIBUSDT_INCLUDE_DIR})
 
+
     add_library(usdt_objs OBJECT ${usdt_src})
     add_library(lua_usdt_objs OBJECT ${usdt_src_lua})
+    add_library(usdt_trace OBJECT ${usdt_src_dir}/usdt_tracepoints_${usdt_trace_arch}.s)
 
-    #set_target_properties(usdt_objs PROPERTIES COMPILE_FLAGS "-g -O0 -Wall -Werror -arch i386 -arch x86_64")
-    set_target_properties(usdt_objs PROPERTIES COMPILE_FLAGS "-arch i386 -arch x86_64")
+    set_target_properties(usdt_objs PROPERTIES COMPILE_FLAGS ${usdt_cflags})
+    set_property(SOURCE ${usdt_src_dir}/usdt_tracepoints_${usdt_trace_arch}.s PROPERTY LANGUAGE ASM)
+    set_target_properties(usdt_trace PROPERTIES COMPILE_FLAGS ${usdt_cflags})
 
     set(LIBUSDT_LIBRARIES usdt)
 
@@ -28,22 +49,11 @@ macro(libusdt_build)
     message(STATUS "Use bundled libusdt includes: ${LIBUSDT_INCLUDE_DIR}/usdt.h")
     message(STATUS "Use bundled libusdt library: ${LIBUSDT_LIBRARIES}")
 
-    add_custom_command(OUTPUT ${usdt_objs_dir}/usdt_tracepoints.o
-        COMMAND as -arch i386 -o ${usdt_objs_dir}/usdt_tracepoints_i386.o
-            ${usdt_src_dir}/usdt_tracepoints_i386.s
-        COMMAND as -arch x86_64 -o ${usdt_objs_dir}/usdt_tracepoints_x86_64.o
-            ${usdt_src_dir}/usdt_tracepoints_x86_64.s
-        COMMAND lipo -create -output ${usdt_objs_dir}/usdt_tracepoints.o
-            ${usdt_objs_dir}/usdt_tracepoints_i386.o
-            ${usdt_objs_dir}/usdt_tracepoints_x86_64.o
-        DEPENDS ${usdt_objs_dir}/usdt.c.o
-    )
-
 
     set(usdt_obj
         $<TARGET_OBJECTS:usdt_objs>
         $<TARGET_OBJECTS:lua_usdt_objs>
-        ${usdt_objs_dir}/usdt_tracepoints.o
+        $<TARGET_OBJECTS:usdt_trace>
     )
 
     add_library(usdt STATIC ${usdt_obj})
@@ -53,6 +63,8 @@ macro(libusdt_build)
     unset(lua_usdt_objs)
     unset(usdt_obj)
     unset(usdt_src)
+    unset(usdt_cflags)
+    unset(usdt_trace_arch)
     unset(usdt_src_lua)
     unset(usdt_src_dir)
 endmacro(libusdt_build)
