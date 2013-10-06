@@ -7,3 +7,6 @@
 [submodule "test/lib/tarantool-python"]
 	path = test/lib/tarantool-python
 	url = https://github.com/mailru/tarantool-python.git
+[submodule "third_party/lua-usdt"]
+	path = third_party/lua-usdt
+	url = https://github.com/chrisa/lua-usdt.git
