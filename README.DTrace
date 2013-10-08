@@ -1,0 +1,87 @@
+DTrace how to:
+
+1. How to build
+-------------
+
+DTrace tested and works on:
+
+* FreeBSD 9.1-RELEASE-p7
+* Darwin 12.5.0
+* Linux 3.8.13-16.el6uek.x86_64 (Oracle Linux)
+
+For enable DTrace use an option -DENABLE_DTRACE=ON in cmake.
+
+USDT probes at realtime only works on FreeBSD and Mac OS X option to enable -DENABLE_DTRACE_USDT=ON.
+
+Example commands to build:
+
+> mkdir build && cd build
+> cmake ..  -DCMAKE_INSTALL_PREFIX=/path/to/install \
+            -DCMAKE_BUILD_TYPE=Rel \
+            -DENABLE_BACKTRACE=OFF \
+            -DCMAKE_C_COMPILER="clang" \
+            -DCMAKE_CXX_COMPILER="clang++" \
+            -DENABLE_DTRACE=ON
+> make && make install
+
+
+2. USDT probes
+-------------
+
+libcoro:
+* coro_init   ()            Probe that fires init coro library.
+
+libev:
+* tick__start (int)         Probe that fires start ev_run() and contained a flag
+* tick__stop  (int)         Probe that fires stop ev_run() and contained a flag
+
+lua_cjson:
+* start       ()            Probe that fires at start encode/decode
+* end         (int, char *) Probe that fires at end of encode/decode contained size and string
+
+
+3. Example of usage
+-------------
+
+On Oracle Linux need load modules:
+
+# modprobe dtrace
+# modprobe fasttrap
+
+Tracing tarantool encode/decode cjson function:
+
+In command line tarantool client:
+
+localhost> c = box.cjson.encode({test=123456})
+---
+...
+localhost> box.cjson.decode(c)
+---
+- test: 123456
+...
+localhost>
+
+On the host machine(server):
+
+$ sudo dtrace -n 'lua_cjson*:tarantool_box:json_*:end { trace(copyinstr(arg1)); }'
+dtrace: description 'lua_cjson*:tarantool_box:json_*:end ' matched 4 probes
+
+CPU     ID                    FUNCTION:NAME
+  1   4230                  json_encode:end   {"test":123456}@
+  0   4229                  json_decode:end   {"test":123456}
+^C
+
+Example USDT probes at runtime in Lua code:
+
+provider = usdt.provider("lua", "tarantool_box")
+iprobe = provider:probe("foo", "iprobe", "int")
+provider:enable()
+iprobe:fire(1)
+
+It code added the iprobe, which fires 1.
+
+$ sudo sudo dtrace -n 'lua*:tarantool_box:foo:iprobe { printf("%d", arg0)}'
+dtrace: description 'lua*:tarantool_box:foo:iprobe ' matched 1 probe
+CPU     ID                    FUNCTION:NAME
+  1   1578                       foo:iprobe 1
+
