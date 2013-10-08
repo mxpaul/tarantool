@@ -3,7 +3,9 @@ provider lua_cjson {
 	probe end(int, char *);
 };
 provider coro {
-	probe new__entry();
+	probe init();
+	probe start();
+	probe end();
 };
 provider ev {
 	probe tick__start(int flags);

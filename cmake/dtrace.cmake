@@ -37,6 +37,7 @@ if(DTRACE)
 endif(DTRACE)
 
 if(DTRACE_FOUND AND ENABLE_DTRACE)
+    add_definitions(-DENABLE_DTRACE)
     set(DTRACE_OBJS)
     message(STATUS "DTrace found")
     set(DTRACE_O_DIR ${CMAKE_CURRENT_BINARY_DIR}/dtrace)
@@ -44,6 +45,16 @@ if(DTRACE_FOUND AND ENABLE_DTRACE)
     execute_process(COMMAND mkdir ${DTRACE_O_DIR})
     message(STATUS "DTrace obj dir ${DTRACE_O_DIR}")
     dtrace_gen_h(${DTRACE_D_FILE} ${PROJECT_SOURCE_DIR}/include/tarantool_provider.h)
+    set (dtrace_headers
+        lua-cjson/cjson_dtrace.h
+        coro/coro_dtrace.h
+        libev/ev_dtrace.h
+    )
+    foreach(dtrace_header ${dtrace_headers})
+       dtrace_gen_h(${DTRACE_D_FILE} ${PROJECT_SOURCE_DIR}/third_party/${dtrace_header})
+    endforeach(dtrace_header)
+
+    unset(dtrace_headers)
 else(DTRACE_FOUND AND ENABLE_DTRACE)
     message(FATAL_ERROR "Could not find DTrace")
 endif (DTRACE_FOUND AND ENABLE_DTRACE)

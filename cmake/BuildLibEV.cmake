@@ -28,11 +28,6 @@ macro(libev_build)
         set(ev_compile_flags "${ev_compile_flags} -DEV_USE_KQUEUE")
     endif()
 
-    if (ENABLE_DTRACE)
-        set(ev_compile_flags "${ev_compile_flags} -DENABLE_DTRACE")
-        dtrace_gen_h(${DTRACE_D_FILE} ${PROJECT_SOURCE_DIR}/third_party/libev/ev_dtrace.h)
-    endif()
-
     list(APPEND ev_link_libraries "m")
     if (TARGET_OS_DEBIAN_FREEBSD)
         # libev depends on librt under kFreeBSD

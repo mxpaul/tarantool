@@ -83,6 +83,9 @@ static coro_context *new_coro, *create_coro;
 static void
 coro_init (void)
 {
+  if (CORO_INIT_ENABLED())
+    CORO_INIT();
+
   volatile coro_func func = coro_init_func;
   volatile void *arg = coro_init_arg;
 
@@ -213,6 +216,9 @@ trampoline (int sig)
 void
 coro_create (coro_context *ctx, coro_func coro, void *arg, void *sptr, long ssize)
 {
+  if (CORO_START_ENABLED())
+    CORO_START();
+
   coro_context nctx;
 # if CORO_SJLJ
   stack_t ostk, nstk;
@@ -358,6 +364,9 @@ coro_create (coro_context *ctx, coro_func coro, void *arg, void *sptr, long ssiz
 # endif
 
   coro_transfer (create_coro, new_coro);
+
+  if (CORO_END_ENABLED())
+    CORO_END();
 }
 
 /*****************************************************************************/
@@ -387,6 +396,9 @@ mutex_unlock_wrapper (void *arg)
 static void *
 coro_init (void *args_)
 {
+  if (CORO_INIT_ENABLED())
+    CORO_INIT();
+
   struct coro_init_args *args = (struct coro_init_args *)args_;
   coro_func func = args->func;
   void *arg = args->arg;
@@ -415,6 +427,9 @@ coro_transfer (coro_context *prev, coro_context *next)
 void
 coro_create (coro_context *ctx, coro_func coro, void *arg, void *sptr, long ssize)
 {
+  if (CORO_START_ENABLED())
+    CORO_START();
+ 
   static coro_context nctx;
   static int once;
 
@@ -456,11 +471,17 @@ coro_create (coro_context *ctx, coro_func coro, void *arg, void *sptr, long ssiz
     }
   else
     ctx->id = null_tid;
+
+  if (CORO_END_ENABLED())
+    CORO_END();
 }
 
 void
 coro_destroy (coro_context *ctx)
 {
+  if (CORO_START_ENABLED())
+    CORO_START();
+
   if (!pthread_equal (ctx->id, null_tid))
     {
       pthread_cancel (ctx->id);
@@ -470,6 +491,9 @@ coro_destroy (coro_context *ctx)
     }
 
   pthread_cond_destroy (&ctx->cv);
+
+  if (CORO_END_ENABLED())
+    CORO_END();
 }
 
 #else

@@ -301,6 +301,8 @@ void coro_destroy (coro_context *ctx);
 
 #endif
 
+#include "external.h"
+
 #if __cplusplus
 }
 #endif

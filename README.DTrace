@@ -29,7 +29,9 @@ Example commands to build:
 -------------
 
 libcoro:
-* coro_init   ()            Probe that fires init coro library.
+* init        ()            Probe that fires init coro library.
+* start       ()            Probe that fires start coro_create()/coro_destroy()
+* end         ()            Probe that fires stop coro_create()/coro_destroy()
 
 libev:
 * tick__start (int)         Probe that fires start ev_run() and contained a flag
