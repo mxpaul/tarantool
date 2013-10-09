@@ -92,13 +92,10 @@ lbox_session_peer(struct lua_State *L)
 	return 1;
 }
 
-struct lbox_session_trigger
-{
-	struct trigger trigger;
-	int ref;
-};
 
-
+/**
+ * run on_connect|on_disconnect trigger with lua context
+ */
 static void
 lbox_session_run_trigger_luactx(struct lua_State *L, va_list ap)
 {
@@ -107,18 +104,18 @@ lbox_session_run_trigger_luactx(struct lua_State *L, va_list ap)
 	lua_call(L, 0, 0);
 }
 
+/**
+ * run on_connect|on_disconnect trigger
+ */
 static void
 lbox_session_run_trigger(struct trigger *trg, void * /* event */)
 {
 	box_luactx(lbox_session_run_trigger_luactx, (struct lua_trigger *)trg);
 }
 
-
-static struct lbox_session_trigger on_connect =
-	{ { rlist_nil, lbox_session_run_trigger, NULL }, LUA_NOREF};
-static struct lbox_session_trigger on_disconnect =
-	{ { rlist_nil, lbox_session_run_trigger, NULL }, LUA_NOREF};
-
+/**
+ * set/reset/get trigger
+ */
 static int
 lbox_session_set_trigger(struct lua_State *L, struct rlist *list)
 {
