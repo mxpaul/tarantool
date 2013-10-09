@@ -39,6 +39,8 @@ struct trigger
 {
 	struct rlist link;
 	trigger_f run;
+
+	void(*destroy)(struct trigger *);
 };
 
 static inline void
@@ -60,5 +62,13 @@ trigger_clear(struct trigger *trigger)
 {
 	rlist_del_entry(trigger, link);
 }
+
+
+struct lua_trigger
+{
+	struct trigger trigger;
+	int ref;
+};
+
 
 #endif /* INCLUDES_TARANTOOL_TRIGGER_H */

@@ -29,9 +29,9 @@
 #include "box_lua_space.h"
 
 extern "C" {
-#include <lua.h>
-#include <lauxlib.h>
-#include <lualib.h>
+	#include <lua.h>
+	#include <lauxlib.h>
+	#include <lualib.h>
 } /* extern "C" */
 
 #include "space.h"
@@ -42,14 +42,6 @@ extern "C" {
 #include "box_lua.h"
 #include "txn.h"
 
-/**
- * Trigger and luaref
- */
-struct lua_space_trigger {
-    struct trigger trigger;
-    int    cb_ref;
-};
-
 
 /**
  * Run user trigger with lua context
@@ -57,33 +49,25 @@ struct lua_space_trigger {
 static void
 space_user_trigger_luactx(struct lua_State *L, va_list ap)
 {
-    struct trigger *trigger = va_arg(ap, typeof(trigger));
-    void *event = va_arg(ap, typeof(event));
+	struct lua_trigger *trigger = va_arg(ap, struct lua_trigger *);
+	struct txn *txn = va_arg(ap, struct txn *);
 
-    struct txn *txn = (struct txn *) event;
+	lua_rawgeti(L, LUA_REGISTRYINDEX, trigger->ref);
 
+	if (txn->old_tuple)
+		lbox_pushtuple(L, txn->old_tuple);
+	else
+		lua_pushnil(L);
 
-    struct space *space = txn->space;
+	if (txn->new_tuple)
+		lbox_pushtuple(L, txn->new_tuple);
+	else
+		lua_pushnil(L);
 
-    lua_getfield(L, LUA_GLOBALSINDEX, "box");
-    lua_getfield(L, -1, "space");
-    lua_getfield(L, -1, space->def.name);
-    lua_getfield(L, -1, "on_replace_trigger");
+	/* TODO: may me space object have to be here */
+	lua_pushstring(L, txn->space->def.name);
 
-    struct lua_space_trigger *lt = (typeof(lt))lua_touserdata(L, -1);
-
-    lua_rawgeti(L, LUA_REGISTRYINDEX, lt->cb_ref);
-
-    if (txn->old_tuple)
-        lbox_pushtuple(L, txn->old_tuple);
-    else
-        lua_pushnil(L);
-
-    if (txn->new_tuple)
-        lbox_pushtuple(L, txn->new_tuple);
-    else
-        lua_pushnil(L);
-    lua_call(L, 2, 0);
+	lua_call(L, 3, 0);
 }
 
 /**
@@ -92,23 +76,31 @@ space_user_trigger_luactx(struct lua_State *L, va_list ap)
 static void
 space_user_trigger(struct trigger *trigger, void *event)
 {
-    box_luactx(space_user_trigger_luactx, trigger, event);
+	struct txn *txn = (struct txn *) event;
+	box_luactx(space_user_trigger_luactx, trigger, txn);
 }
-
 
 /**
- * If someone does rawset(space, 'on_replace_trigger', nil)
- * the trigger will be cleared after lua collected the trigger.
+ * lua_trigger destroy method with lua context
  */
-static int
-lbox_space_trigger_gc(struct lua_State *L)
+static void
+space_user_trigger_destroy_luaref(struct lua_State *L, va_list ap)
 {
-    struct lua_space_trigger *lt = (typeof(lt)) lua_touserdata(L, 1);
-    trigger_clear(&lt->trigger);
-    luaL_unref(L, LUA_REGISTRYINDEX, lt->cb_ref);
-    return 0;
+	int ref = va_arg(ap, int);
+	luaL_unref(L, LUA_REGISTRYINDEX, ref);
 }
 
+/**
+ * destroy trigger method (can be called from space_delete method)
+ */
+static void
+space_user_trigger_destroy(struct trigger *trigger)
+{
+	struct lua_trigger *lt = (struct lua_trigger *)trigger;
+	trigger_clear(trigger);
+	box_luactx(space_user_trigger_destroy_luaref, lt->ref);
+	free(trigger);
+}
 
 /**
  * Set/Reset/Get space.on_replace trigger
@@ -116,108 +108,92 @@ lbox_space_trigger_gc(struct lua_State *L)
 static int
 lbox_space_on_replace_trigger(struct lua_State *L)
 {
-    int top = lua_gettop(L);
+	int top = lua_gettop(L);
 
-    if ( top == 0 || !lua_istable(L, 1))
-        luaL_error(L, "usage: space:on_replace instead space.on_replace");
+	if ( top == 0 || !lua_istable(L, 1))
+		luaL_error(L, "usage: space:on_replace "
+				"instead space.on_replace");
 
-    lua_pushstring(L, "n");
-    lua_rawget(L, 1);
-    if (lua_isnil(L, -1))
-        luaL_error(L, "Can't find space.n property");
+	lua_pushstring(L, "n");
+	lua_rawget(L, 1);
+	if (lua_isnil(L, -1))
+		luaL_error(L, "Can't find space.n property");
 
-    int sno = lua_tointeger(L, -1);
-    lua_pop(L, 1);
-
-
-    struct space *space = space_find( sno );
+	int sno = lua_tointeger(L, -1);
+	lua_pop(L, 1);
 
 
-    struct trigger *trigger, *current = NULL;
-    rlist_foreach_entry(trigger, &space->on_replace, link) {
-        if (trigger->run == space_user_trigger) {
-            current = trigger;
-            break;
-        }
-    }
-
-    /* get current trigger function */
-    if (top == 1) {
-        if (!current) {
-            lua_pushnil(L);
-            return 1;
-        }
-        lua_pushstring(L, "on_replace_trigger");
-        lua_rawget(L, 1);
-        if (lua_isnil(L, -1))
-            return 1;
-        struct lua_space_trigger *lt = (typeof(lt)) lua_touserdata(L, -1);
-        lua_pop(L, 1);
-        lua_rawgeti(L, LUA_REGISTRYINDEX, lt->cb_ref);
-        return 1;
-    }
-
-    /* set or re-set the trigger */
-    if (!lua_isfunction(L, 2) && !lua_isnil(L, 2)) {
-        luaL_error(L,
-            "usage: space:on_replace([ function | nil ])");
-    }
+	struct space *space = space_find(sno);
 
 
-    /* remove old trigger */
-    lua_pushstring(L, "on_replace_trigger");
-    lua_rawget(L, 1);
+	struct trigger *trigger;
+	struct lua_trigger *current = NULL;
+	rlist_foreach_entry(trigger, &space->on_replace, link) {
+		if (trigger->run == space_user_trigger) {
+			current = (struct lua_trigger *)trigger;
+			break;
+		}
+	}
 
-    if (lua_isnil(L, -1)) {
-        lua_pop(L, 1);
-    } else {
-        struct lua_space_trigger *lt = (typeof(lt))lua_touserdata(L, -1);
-        trigger_clear(&lt->trigger);
-        lua_pushstring(L, "on_replace_trigger");
-        lua_pushnil(L);
-        lua_rawset(L, 1);
-    }
 
-    if (lua_isnil(L, 2)) {
-        lua_pushnil(L);
-        return 1;
-    }
+	/* get current trigger function */
+	if (top == 1) {
+		if (!current) {
+			lua_pushnil(L);
+			return 1;
+		}
+		lua_rawgeti(L, LUA_REGISTRYINDEX, current->ref);
+		return 1;
+	}
+
+	/* set or re-set the trigger */
+	if (!lua_isfunction(L, 2) && !lua_isnil(L, 2)) {
+		luaL_error(L,
+				"usage: space:on_replace([ function | nil ])");
+	}
+
+	/* cleanup trigger */
+	if (lua_isnil(L, 2)) {
+		if (current) {
+			luaL_unref(L, LUA_REGISTRYINDEX, current->ref);
+			trigger_clear(&current->trigger);
+			free(current);
+		}
+		lua_pushnil(L);
+		return 1;
+	}
 
 
 
-    /* save ref on trigger function */
-    lua_pushvalue(L, 2);
-    int cb_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	/* save ref on trigger function */
+	lua_pushvalue(L, 2);
+	int cb_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
-    auto scoped_guard = make_scoped_guard([&] {
-        luaL_unref(L, LUA_REGISTRYINDEX, cb_ref);
-    });
+	if (current) {
+		luaL_unref(L, LUA_REGISTRYINDEX, current->ref);
+		current->ref = cb_ref;
+		lua_pushvalue(L, 2);
+		return 1;
+	}
 
-
-    lua_pushstring(L, "on_replace_trigger");
-
-    struct lua_space_trigger *lt = (typeof(lt))
-                        lua_newuserdata(L, sizeof(struct lua_space_trigger));
-
-    lt->trigger.run = space_user_trigger;
-    rlist_create(&lt->trigger.link);
-    lt->cb_ref = cb_ref;
+	auto scoped_guard = make_scoped_guard([&] {
+		luaL_unref(L, LUA_REGISTRYINDEX, cb_ref);
+	});
 
 
-    lua_newtable(L);
-    lua_pushstring(L, "__gc");
-    lua_pushcfunction(L, lbox_space_trigger_gc);
-    lua_rawset(L, -3);
-    lua_setmetatable(L, -2);
+	current = (struct lua_trigger *)malloc(sizeof(struct lua_trigger));
 
-    lua_rawset(L, 1);
+	if (!current)
+		luaL_error(L, "Can't allocate memory for trigger");
 
-    trigger_set(&space->on_replace, &lt->trigger);
+	current->trigger.run = space_user_trigger;
+	current->trigger.destroy = space_user_trigger_destroy;
+	current->ref = cb_ref;
+	trigger_set(&space->on_replace, &current->trigger);
 
-    scoped_guard.is_active = false;
-
-    lua_pushvalue(L, 2);
-    return 1;
+	scoped_guard.is_active = false;
+	lua_pushvalue(L, 2);
+	return 1;
 
 }
 

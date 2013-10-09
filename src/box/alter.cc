@@ -867,7 +867,7 @@ on_drop_space(struct trigger * /* trigger */, void *event)
 	space_delete(space);
 }
 
-static struct trigger drop_space_trigger =  { rlist_nil, on_drop_space };
+static struct trigger drop_space_trigger =  { rlist_nil, on_drop_space, NULL };
 
 /**
  * A trigger which is invoked on replace in a data dictionary
@@ -1062,11 +1062,11 @@ on_replace_dd_index(struct trigger * /* trigger */, void *event)
 }
 
 struct trigger alter_space_on_replace_space = {
-	rlist_nil, on_replace_dd_space
+	rlist_nil, on_replace_dd_space, NULL
 };
 
 struct trigger alter_space_on_replace_index = {
-	rlist_nil, on_replace_dd_index
+	rlist_nil, on_replace_dd_index, NULL
 };
 
 /* vim: set foldmethod=marker */
