@@ -212,7 +212,7 @@ tuple_init_field_map(struct tuple_format *format, struct tuple *tuple, uint32_t 
 
 	/* Check to see if the tuple has a sufficient number of fields. */
 	uint32_t field_count = mp_array_load(&pos);
-	if (field_count < format->field_count)
+	if (unlikely(field_count < format->field_count))
 		tnt_raise(ClientError, ER_INDEX_ARITY,
 			  (unsigned) field_count,
 			  (unsigned) format->field_count);
@@ -337,7 +337,7 @@ tuple_next_cstr(struct tuple_iterator *it)
 	if (mp_typeof(*field) != MP_STR)
 		tnt_raise(ClientError, ER_FIELD_TYPE, fieldno,
 			  field_type_strs[STRING]);
-	uint32_t len;
+	uint32_t len = 0;
 	const char *str = mp_str_load(&field, &len);
 	return tuple_field_to_cstr(str, len);
 }
@@ -357,7 +357,7 @@ tuple_field_cstr(struct tuple *tuple, uint32_t i)
 	if (mp_typeof(*field) != MP_STR)
 		tnt_raise(ClientError, ER_FIELD_TYPE, i,
 			  field_type_strs[STRING]);
-	uint32_t len;
+	uint32_t len = 0;
 	const char *str = mp_str_load(&field, &len);
 	return tuple_field_to_cstr(str, len);
 }
@@ -392,10 +392,13 @@ tuple_new(struct tuple_format *format, const char **data, const char *end)
 {
 	size_t tuple_len = end - *data;
 
+	/*
 	if (mp_pick(data, end) != MP_ARRAY)
 		tnt_raise(IllegalParams,
 			  "tuple_new(): tuple must be MsgPack Array");
+			 */
 
+	mp_load(data);
 	if (*data != end) {
 		say_error("\n"
 			  "********************************************\n"
@@ -446,7 +449,7 @@ tuple_compare_field(const char **field_a, const char **field_b,
 	}
 	case STRING:
 	{
-		uint32_t size_a, size_b;
+		uint32_t size_a = 0, size_b = 0;
 		const char *a = mp_str_load(field_a, &size_a);
 		const char *b = mp_str_load(field_b, &size_b);
 		int r = memcmp(a, b, MIN(size_a, size_b));
@@ -466,12 +469,16 @@ int
 tuple_compare(const struct tuple *tuple_a, const struct tuple *tuple_b,
 	      const struct key_def *key_def)
 {
-#if 0
 	/* TODO: MsgPack */
-	if (key_def->part_count == 1 && key_def->parts[0].fieldno == 0)
-		return tuple_compare_field(tuple_a->data, tuple_b->data,
+	if (key_def->part_count == 1 && key_def->parts[0].fieldno == 0) {
+		const char *a = tuple_a->data;
+		const char *b = tuple_b->data;
+		mp_array_load(&a);
+		mp_array_load(&b);
+		return tuple_compare_field(&a, &b,
 					   key_def->parts[0].type);
-#endif
+	}
+
 	const struct key_part *part = key_def->parts;
 	const struct key_part *end = part + key_def->part_count;
 	struct tuple_format *format_a = tuple_format(tuple_a);

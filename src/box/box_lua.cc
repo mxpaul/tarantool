@@ -296,10 +296,13 @@ luaL_mp_pack(struct lua_State *L, luaL_Buffer *b, int index)
 	struct lua_field field;
 	lua_tofield(L, index, &field);
 	switch (field.type) {
-	case MP_INT:
-		return luaL_mp_int_pack(b, field.ival);
 	case MP_UINT:
 		return luaL_mp_uint_pack(b, field.ival);
+	case MP_STR:
+	case MP_BIN:
+		return luaL_mp_str_pack(b, field.sval.data, field.sval.len);
+	case MP_INT:
+		return luaL_mp_int_pack(b, field.ival);
 	case MP_FLOAT:
 		return luaL_mp_float_pack(b, field.fval);
 	case MP_DOUBLE:
@@ -308,9 +311,6 @@ luaL_mp_pack(struct lua_State *L, luaL_Buffer *b, int index)
 		return luaL_mp_bool_pack(b, field.bval);
 	case MP_NIL:
 		return luaL_mp_nil_pack(b);
-	case MP_STR:
-	case MP_BIN:
-		return luaL_mp_str_pack(b, field.sval.data, field.sval.len);
 	case MP_MAP:
 		/* Map */
 		luaL_mp_map_pack(b, field.size);
@@ -579,7 +579,7 @@ lbox_tuple_find_do(struct lua_State *L, bool all)
 			break;
 		case MP_STR:
 		{
-			uint32_t len1;
+			uint32_t len1 = 0;
 			const char *s1 = mp_str_load(&f, &len1);
 			size_t len2 = arg.sval.len;
 			const char *s2 = arg.sval.data;

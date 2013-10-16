@@ -96,6 +96,8 @@ pack_u(64)
 extern "C" {
 #endif /* defined(__cplusplus) */
 
+#define MSGPACK 1
+
 inline enum mp_type
 mp_typeof(const char c)
 {
@@ -489,6 +491,34 @@ mp_uint_load(const char **data)
 	unsigned const char c = **data;
 	*data += 1;
 	uint64_t val;
+	if (c <= 0x7f)
+		return c;
+	if (c == 0xcc) {
+		val = *(uint8_t *) *data;
+		*data += sizeof(uint8_t);
+		return val;
+	}
+	if (c == 0xcd) {
+		val = bswap_u16(*(uint16_t *) *data);
+		*data += sizeof(uint16_t);
+		return val;
+	}
+	if (c == 0xce) {
+		val = bswap_u32(*(uint32_t *) *data);
+		*data += sizeof(uint32_t);
+		return val;
+	}
+
+	if (c == 0xcf) {
+		val = bswap_u64(*(uint64_t *) *data);
+		*data += sizeof(uint64_t);
+		return val;
+	}
+
+	assert(false);
+	return 0;
+
+#if 0
 	switch (c) {
 	case 0x00 ... 0x7f:
 		return c;
@@ -512,6 +542,7 @@ mp_uint_load(const char **data)
 		assert(false);
 		return 0;
 	}
+#endif
 }
 
 inline int64_t

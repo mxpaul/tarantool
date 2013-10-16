@@ -108,7 +108,7 @@ execute_update(const struct request *request, struct txn *txn,
 
 /** }}} */
 
-static void
+void
 execute_select(const struct request *request, struct txn *txn,
 	       struct port *port)
 {

@@ -1024,6 +1024,10 @@ lua_tofield(lua_State *L, int index, struct lua_field *field)
 	switch (lua_type(L, index)) {
 	case LUA_TNUMBER:
 		num = lua_tonumber(L, index);
+#if 0
+		field->type = MP_UINT;
+		field->ival = (uint64_t) num;
+#else
 		if (modf(num, &intpart) != 0.0) {
 			field->type = MP_DOUBLE;
 			field->dval = num;
@@ -1037,6 +1041,7 @@ lua_tofield(lua_State *L, int index, struct lua_field *field)
 			field->type = MP_DOUBLE;
 			field->dval = num;
 		}
+#endif
 		return;
 	case LUA_TCDATA:
 	{
