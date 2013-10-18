@@ -111,6 +111,7 @@ set (common_sources
      crc32.c
      rope.c
      ipc.cc
+     qsort_arg_mt.cc
      lua/info.cc
      lua/stat.cc
      lua/slab.cc
