@@ -65,6 +65,8 @@ mh_index_hash(struct tuple *const *tuple, const struct key_def *key_def)
 	if (key_def->part_count == 1 && part->type == NUM) {
 		const char *field = tuple_field(*tuple, part->fieldno);
 		uint64_t val = mp_uint_load(&field);
+		if (likely(val <= UINT32_MAX))
+			return val;
 		return ((uint32_t)((val)>>33^(val)^(val)<<11));
 	}
 
@@ -95,6 +97,8 @@ mh_index_hash_key(const char *key, const struct key_def *key_def)
 
 	if (key_def->part_count == 1 && part->type == NUM) {
 		uint64_t val = mp_uint_load(&key);
+		if (likely(val <= UINT32_MAX))
+			return val;
 		return ((uint32_t)((val)>>33^(val)^(val)<<11));
 	}
 

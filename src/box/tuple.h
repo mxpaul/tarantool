@@ -189,7 +189,7 @@ struct TupleGuard {
 * @param tuple tuple
 * @return tuple format instance
 */
-__attribute__((always_inline)) static inline struct tuple_format *
+static inline struct tuple_format *
 tuple_format(const struct tuple *tuple)
 {
 	struct tuple_format *format = tuple_formats[tuple->format_id];

@@ -98,6 +98,8 @@ extern "C" {
 
 #define MSGPACK 1
 
+#define mp_unreachable() (assert(false), __builtin_unreachable())
+
 inline enum mp_type
 mp_typeof(const char c)
 {
@@ -139,7 +141,6 @@ mp_typeof(const char c)
 	case 0xe0 ... 0xff:
 		return MP_INT;
 	default:
-		assert(false);
 		return MP_EXT;
 	}
 }
@@ -209,9 +210,11 @@ mp_array_load(const char **data)
 	unsigned const char c = **data;
 	*data += 1;
 	uint32_t size;
+
+	if (likely((c & 0xf0) == 0x90))
+		return (c & 0xf);
+
 	switch (c) {
-	case 0x90 ... 0x9f:
-		return c & 0xf;
 	case 0xdc:
 		size = bswap_u16(*(uint16_t *) *data);
 		*data += sizeof(uint16_t);
@@ -220,10 +223,9 @@ mp_array_load(const char **data)
 		size = bswap_u32(*(uint32_t *) *data);
 		*data += sizeof(uint32_t);
 		return size;
-	default:
-		assert(false);
-		return 0;
 	}
+
+	mp_unreachable();
 }
 
 inline uint32_t
@@ -302,10 +304,9 @@ mp_map_load(const char **data)
 		size = bswap_u32(*(uint32_t *) *data);
 		*data += sizeof(uint32_t);
 		return size;
-	default:
-		assert(false);
-		return 0;
 	}
+
+	mp_unreachable();
 }
 
 inline uint32_t
@@ -491,34 +492,7 @@ mp_uint_load(const char **data)
 	unsigned const char c = **data;
 	*data += 1;
 	uint64_t val;
-	if (c <= 0x7f)
-		return c;
-	if (c == 0xcc) {
-		val = *(uint8_t *) *data;
-		*data += sizeof(uint8_t);
-		return val;
-	}
-	if (c == 0xcd) {
-		val = bswap_u16(*(uint16_t *) *data);
-		*data += sizeof(uint16_t);
-		return val;
-	}
-	if (c == 0xce) {
-		val = bswap_u32(*(uint32_t *) *data);
-		*data += sizeof(uint32_t);
-		return val;
-	}
 
-	if (c == 0xcf) {
-		val = bswap_u64(*(uint64_t *) *data);
-		*data += sizeof(uint64_t);
-		return val;
-	}
-
-	assert(false);
-	return 0;
-
-#if 0
 	switch (c) {
 	case 0x00 ... 0x7f:
 		return c;
@@ -538,11 +512,9 @@ mp_uint_load(const char **data)
 		val = bswap_u64(*(uint64_t *) *data);
 		*data += sizeof(uint64_t);
 		return val;
-	default:
-		assert(false);
-		return 0;
 	}
-#endif
+
+	mp_unreachable();
 }
 
 inline int64_t
@@ -570,10 +542,9 @@ mp_int_load(const char **data)
 		val = bswap_u64(*(int64_t *) *data);
 		*data += sizeof(int64_t);
 		return val;
-	default:
-		assert(false);
-		return 0;
 	}
+
+	mp_unreachable();
 }
 
 inline uint32_t
@@ -777,10 +748,9 @@ mp_str_load(const char **data, uint32_t *len)
 		str = *data;
 		*data += *len;
 		return str;
-	default:
-		assert(false);
-		return NULL;
 	}
+
+	mp_unreachable();
 }
 
 inline const char *
@@ -897,10 +867,9 @@ mp_bin_load(const char **data, uint32_t *len)
 		str = *data;
 		*data += *len;
 		return str;
-	default:
-		assert(false);
-		return NULL;
 	}
+
+	mp_unreachable();
 }
 
 inline uint32_t
@@ -978,69 +947,176 @@ mp_bool_load(const char **data)
 		return true;
 	case 0xc2:
 		return false;
-	default:
-		assert(false);
-		return false;
 	}
+
+	mp_unreachable();
 }
 
 inline enum mp_type
 mp_load(const char **data)
 {
 	uint32_t size;
+	unsigned char c = *(unsigned char *) *data;
+	*data += 1;
 
-	switch (*(unsigned char *) *data) {
+	switch (c) {
+	/* {{{ MP_UINT */
 	case 0x00 ... 0x7f:
-	case 0xcc ... 0xcf:
-		(void) mp_uint_load(data);
 		return MP_UINT;
-	case 0xd0 ... 0xd3:
-	case 0xe0 ... 0xff:
-		(void) mp_int_load(data);
+	case 0xcc:
+		*data += sizeof(uint8_t);
+		return MP_UINT;
+	case 0xcd:
+		*data += sizeof(uint16_t);
+		return MP_UINT;
+	case 0xce:
+		*data += sizeof(uint32_t);
+		return MP_UINT;
+	case 0xcf:
+		*data += sizeof(uint64_t);
+		return MP_UINT;
+	/* }}} */
+
+	/* {{{ MP_INT */
+#if defined(TEST)
+	case 0xd0 ... 0dx3:
+		*data += 1 << (c & 0x3);
+		*data += sizeof(uint8_t);
 		return MP_INT;
+#endif
+	case 0xe0 ... 0xff:
+		return MP_INT;
+	case 0xd1:
+		*data += sizeof(uint16_t);
+		return MP_INT;
+	case 0xd2:
+		*data += sizeof(uint32_t);
+		return MP_INT;
+	case 0xd3:
+		*data += sizeof(int64_t);
+		return MP_INT;
+	/* }}} */
+
+	/* {{{ MP_MAP */
 	case 0x80 ... 0x8f:
-	case 0xde ...  0xdf:
-		size = mp_map_load(data);
+		size = (c & 0xf);
 		for (uint32_t i = 0; i < size; i++) {
 			mp_load(data); 	/* Key */
 			mp_load(data);	/* Value */
 		}
 		return MP_MAP;
-	case 0x90 ... 0x9f:
-	case 0xdc ... 0xdd:
-		size = mp_array_load(data);
+	case 0xde:
+		size = bswap_u16(*(uint16_t *) *data);
+		*data += sizeof(uint16_t);
 		for (uint32_t i = 0; i < size; i++) {
-			mp_load(data); /* Element */
+			mp_load(data); 	/* Key */
+			mp_load(data);	/* Value */
+		}
+		return MP_MAP;
+	case 0xdf:
+		size = bswap_u32(*(uint32_t *) *data);
+		*data += sizeof(uint32_t);
+		for (uint32_t i = 0; i < size; i++) {
+			mp_load(data); 	/* Key */
+			mp_load(data);	/* Value */
+		}
+		return MP_MAP;
+	/* }}} */
+
+	/* {{{ MP_ARRAY */
+	case 0x90 ... 0x9f:
+		size = c & 0xf;
+		for (uint32_t i = 0; i < size; i++) {
+			mp_load(data);
 		}
 		return MP_ARRAY;
+	case 0xdc:
+		size = bswap_u16(*(uint16_t *) *data);
+		*data += sizeof(uint16_t);
+		for (uint32_t i = 0; i < size; i++) {
+			mp_load(data);
+		}
+		return MP_ARRAY;
+	case 0xdd:
+		size = bswap_u32(*(uint32_t *) *data);
+		*data += sizeof(uint32_t);
+		for (uint32_t i = 0; i < size; i++) {
+			mp_load(data);
+		}
+		return MP_ARRAY;
+	/* }}} */
+
+	/* {{{ MP_STR */
 	case 0xa0 ... 0xbf:
-	case 0xd9 ... 0xdb:
-		(void) mp_str_load(data, &size);
+		size = (c & 0x1f);
+		*data += size;
 		return MP_STR;
+	case 0xd9:
+		size = *(uint8_t *) *data;
+		*data += sizeof(uint8_t);
+		*data += size;
+		return MP_STR;
+	case 0xda:
+		size = bswap_u16(*(uint16_t *) *data);
+		*data += sizeof(uint16_t);
+		*data += size;
+		return MP_STR;
+	case 0xdb:
+		size = bswap_u32(*(uint32_t *) *data);
+		*data += sizeof(uint32_t);
+		*data += size;
+		return MP_STR;
+	/* }}} */
+
+	/* {{{ MP_NIL */
 	case 0xc0:
-		(void) mp_nil_load(data);
 		return MP_NIL;
+	/* }}} */
+
+	/* {{{ MP_BOOL */
 	case 0xc2 ... 0xc3:
-		(void) mp_bool_load(data);
 		return MP_BOOL;
+	/* }}} */
+
+	/* {{{ MP_FLOAT */
 	case 0xca:
-		(void) mp_float_load(data);
+		*data += sizeof(float);
 		return MP_FLOAT;
+	/* }}} */
+
+	/* {{{ MP_DOUBLE */
 	case 0xcb:
-		(void) mp_double_load(data);
+		*data += sizeof(double);
 		return MP_DOUBLE;
-	case 0xc4 ... 0xc6:
-		(void) mp_bin_load(data, &size);
+	/* }}} */
+
+	/* {{{ MP_BIN */
+	case 0xc4:
+		size = *(uint8_t *) *data;
+		*data += sizeof(uint8_t);
+		*data += size;
 		return MP_BIN;
-	case 0xc1:
-	case 0xc7 ... 0xc9:
-	case 0xd4 ... 	0xd8:
+	case 0xc5:
+		size = bswap_u16(*(uint16_t *) *data);
+		*data += sizeof(uint16_t);
+		*data += size;
+		return MP_BIN;
+	case 0xc6:
+		size = bswap_u32(*(uint32_t *) *data);
+		*data += sizeof(uint32_t);
+		*data += size;
+		return MP_BIN;
+	/* }}} */
+#if 0
+	case 0xc1:          /* reserved */
+	case 0xc7 ... 0xc9: /* extensions */
+	case 0xd4 ... 0xd8: /* extensions */
 		assert(false);
 		return MP_EXT;
+#endif
 	}
 
-	assert(false);
-	return MP_EXT;
+	mp_unreachable();
 }
 
 inline enum mp_type
@@ -1094,16 +1170,19 @@ mp_pick(const char **data, const char *end)
 	case 0xc4 ... 0xc6:
 		(void) mp_bin_pick(data, end, &size);
 		return MP_BIN;
+#if 0
 	case 0xc1:
 	case 0xc7 ... 0xc9:
 	case 0xd4 ... 	0xd8:
-		tnt_raise(IllegalParams, "unsupported MsgPack");
 		return MP_EXT;
+#endif
 	}
 
-	assert(false);
-	return MP_EXT;
+	tnt_raise(IllegalParams, "unsupported MsgPack");
+	mp_unreachable();
 }
+
+#undef mp_unreachable
 
 #if defined(__cplusplus)
 } /* extern "C" */

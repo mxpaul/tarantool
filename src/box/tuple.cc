@@ -469,14 +469,12 @@ int
 tuple_compare(const struct tuple *tuple_a, const struct tuple *tuple_b,
 	      const struct key_def *key_def)
 {
-	/* TODO: MsgPack */
 	if (key_def->part_count == 1 && key_def->parts[0].fieldno == 0) {
 		const char *a = tuple_a->data;
 		const char *b = tuple_b->data;
 		mp_array_load(&a);
 		mp_array_load(&b);
-		return tuple_compare_field(&a, &b,
-					   key_def->parts[0].type);
+		return tuple_compare_field(&a, &b, key_def->parts[0].type);
 	}
 
 	const struct key_part *part = key_def->parts;
