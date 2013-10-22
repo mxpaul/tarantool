@@ -222,8 +222,7 @@ do_update_op_set(struct op_set_arg *arg, const char *in __attribute__((unused)),
 static void
 do_update_op_add(struct op_arith_arg *arg, const char *in, char *out)
 {
-	const char *k = in;
-	if (mp_load(&k) != MP_UINT)
+	if (mp_typeof(*in) != MP_UINT)
 		tnt_raise(IllegalParams, "field must be uint");
 	uint64_t val = mp_uint_load(&in);
 	mp_uint_pack(out, val + arg->val);
@@ -232,8 +231,7 @@ do_update_op_add(struct op_arith_arg *arg, const char *in, char *out)
 static void
 do_update_op_subtract(struct op_arith_arg *arg, const char *in, char *out)
 {
-	const char *k = in;
-	if (mp_load(&k) != MP_UINT)
+	if (mp_typeof(*in) != MP_UINT)
 		tnt_raise(IllegalParams, "field must be uint");
 	mp_uint_pack(out, mp_uint_load(&in) - arg->val);
 }
@@ -241,8 +239,7 @@ do_update_op_subtract(struct op_arith_arg *arg, const char *in, char *out)
 static void
 do_update_op_and(struct op_arith_arg *arg, const char *in, char *out)
 {
-	const char *k = in;
-	if (mp_load(&k) != MP_UINT)
+	if (mp_typeof(*in) != MP_UINT)
 		tnt_raise(IllegalParams, "field must be uint");
 	mp_uint_pack(out, mp_uint_load(&in) & arg->val);
 }
@@ -250,8 +247,7 @@ do_update_op_and(struct op_arith_arg *arg, const char *in, char *out)
 static void
 do_update_op_xor(struct op_arith_arg *arg, const char *in, char *out)
 {
-	const char *k = in;
-	if (mp_load(&k) != MP_UINT)
+	if (mp_typeof(*in) != MP_UINT)
 		tnt_raise(IllegalParams, "field must be uint");
 	mp_uint_pack(out, mp_uint_load(&in) ^ arg->val);
 }
@@ -259,8 +255,7 @@ do_update_op_xor(struct op_arith_arg *arg, const char *in, char *out)
 static void
 do_update_op_or(struct op_arith_arg *arg, const char *in, char *out)
 {
-	const char *k = in;
-	if (mp_load(&k) != MP_UINT)
+	if (mp_typeof(*in) != MP_UINT)
 		tnt_raise(IllegalParams, "field must be uint");
 	mp_uint_pack(out, mp_uint_load(&in) | arg->val);
 }
@@ -268,8 +263,7 @@ do_update_op_or(struct op_arith_arg *arg, const char *in, char *out)
 static void
 do_update_op_splice(struct op_splice_arg *arg, const char *in, char *out)
 {
-	const char *k = in;
-	if (mp_load(&k) != MP_STR)
+	if (mp_typeof(*in) != MP_STR)
 		tnt_raise(IllegalParams, "field must be str");
 
 	uint32_t str_len;
@@ -381,8 +375,10 @@ init_update_op_arith(struct tuple_update *update, struct update_op *op)
 	struct op_arith_arg *arg = &op->arg.arith;
 
 	const char *value = op->arg.set.value;
-	const char *end = value + op->arg.set.length;
-	arg->val = mp_uint_pick(&value, end);
+	/* TODO: signed int & float support */
+	if (mp_typeof(*value) != MP_UINT)
+		tnt_raise(ClientError, ER_ARG_TYPE, op->field_no, "UINT");
+	arg->val = mp_uint_load(&value);
 	STAILQ_INSERT_TAIL(&field->ops, op, next);
 	op->max_field_len = mp_uint_sizeof(UINT64_MAX);
 }
@@ -398,8 +394,6 @@ init_update_op_splice(struct tuple_update *update, struct update_op *op)
 	const char *value = op->arg.set.value;
 	const char *end = value + op->arg.set.length;
 
-
-	const char *value_end = end;
 	if (mp_typeof(*value) == MP_STR) {
 		/*
 		 * Backward compatible solution for
@@ -407,8 +401,7 @@ init_update_op_splice(struct tuple_update *update, struct update_op *op)
 		 *    box.pack('ppp', offset, cut_length, past})
 		 */
 		uint32_t len;
-		value = mp_str_pick(&value, end, &len);
-		value_end = value + len;
+		value = mp_str_load(&value, &len);
 	} else {
 		/*
 		 * box.update(space, key, ':p', field_no,
@@ -416,18 +409,25 @@ init_update_op_splice(struct tuple_update *update, struct update_op *op)
 		 */
 		uint32_t size;
 		if (mp_typeof(*value) != MP_ARRAY ||
-		    (size = mp_array_pick(&value, end)) != 3) {
+		    (size = mp_array_load(&value)) != 3) {
 			tnt_raise(IllegalParams, "Please use "
 				  "{offset, cut_length, paste} as "
 				  "third argument");
 		}
 	}
 
-	/* TODO: Add support for signed numbers */
-	arg->offset = mp_uint_pick(&value, value_end); /* offset */
-	arg->cut_length = mp_uint_pick(&value, value_end); /* cut length */
-	arg->paste = mp_str_pick(&value, value_end,
-				   &arg->paste_length); /* value */
+	/* TODO: signed int & float support */
+	if (unlikely(mp_typeof(*value) != MP_UINT))
+		tnt_raise(ClientError, ER_ARG_TYPE, op->field_no, "UINT");
+	arg->offset = mp_uint_load(&value);
+
+	if (unlikely(mp_typeof(*value) != MP_UINT))
+		tnt_raise(ClientError, ER_ARG_TYPE, op->field_no, "UINT");
+	arg->cut_length = mp_uint_load(&value); /* cut length */
+
+	if (unlikely(mp_typeof(*value) != MP_UINT))
+		tnt_raise(ClientError, ER_ARG_TYPE, op->field_no, "UINT");
+	arg->paste = mp_str_load(&value, &arg->paste_length); /* value */
 
 	/* Check that the operands are fully read. */
 	if (value != end)
@@ -649,7 +649,9 @@ update_read_ops(struct tuple_update *update, const char *expr,
 
 		/* Read MP value with type checking */
 		op->arg.set.value = expr;
-		mp_pick(&expr, expr_end); /* test that arg is valid MP */
+		/* test that arg is valid MsgPack */
+		if (unlikely(!mp_check(&expr, expr_end)))
+			tnt_raise(IllegalParams, "Invalid MsgPack");
 		op->arg.set.length = expr - op->arg.set.value;
 	}
 

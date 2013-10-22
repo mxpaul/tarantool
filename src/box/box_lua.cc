@@ -76,7 +76,7 @@ static lua_State *root_L;
  */
 
 static void
-luaL_mp_unpack(struct lua_State *L, const char **data, const char *end);
+luaL_mp_load(struct lua_State *L, const char **data);
 
 /** {{{ box.tuple Lua library
  *
@@ -196,7 +196,7 @@ lbox_tuple_slice(struct lua_State *L)
 	uint32_t field_no = start;
 	field = tuple_seek(&it, start);
 	while (field && field_no < end) {
-		luaL_mp_unpack(L, &field, tuple->data + tuple->bsize);
+		luaL_mp_load(L, &field);
 		++field_no;
 		field = tuple_next(&it);
 	}
@@ -364,12 +364,12 @@ luaL_mp_packstack(struct lua_State *L, luaL_Buffer *b, int first, int last)
 }
 
 static void
-luaL_mp_unpack(struct lua_State *L, const char **data, const char *end)
+luaL_mp_load(struct lua_State *L, const char **data)
 {
 	switch (mp_typeof(**data)) {
 	case MP_UINT:
 	{
-		uint64_t val = mp_uint_pick(data, end);
+		uint64_t val = mp_uint_load(data);
 		if (val <= UINT32_MAX) {
 			lua_pushinteger(L, val);
 		} else {
@@ -380,7 +380,7 @@ luaL_mp_unpack(struct lua_State *L, const char **data, const char *end)
 	}
 	case MP_INT:
 	{
-		int64_t val = mp_int_pick(data, end);
+		int64_t val = mp_int_load(data);
 		if (val >= INT32_MIN && val <= INT32_MAX) {
 			lua_pushinteger(L, val);
 		} else {
@@ -390,49 +390,49 @@ luaL_mp_unpack(struct lua_State *L, const char **data, const char *end)
 		return;
 	}
 	case MP_FLOAT:
-		lua_pushnumber(L, mp_float_pick(data, end));
+		lua_pushnumber(L, mp_float_load(data));
 		return;
 	case MP_DOUBLE:
-		lua_pushnumber(L, mp_double_pick(data, end));
+		lua_pushnumber(L, mp_double_load(data));
 		return;
 	case MP_STR:
 	{
 		uint32_t len = 0;
-		const char *str = mp_str_pick(data, end, &len);
+		const char *str = mp_str_load(data, &len);
 		lua_pushlstring(L, str, len);
 		return;
 	}
 	case MP_BIN:
 	{
 		uint32_t len = 0;
-		const char *str = mp_bin_pick(data, end, &len);
+		const char *str = mp_bin_load(data, &len);
 		lua_pushlstring(L, str, len);
 		return;
 	}
 	case MP_BOOL:
-		lua_pushboolean(L, mp_bool_pick(data, end));
+		lua_pushboolean(L, mp_bool_load(data));
 		return;
 	case MP_NIL:
-		mp_nil_pick(data, end);
+		mp_nil_load(data);
 		lua_pushnil(L);
 		return;
 	case MP_ARRAY:
 	{
-		uint32_t size = mp_array_pick(data, end);
+		uint32_t size = mp_array_load(data);
 		lua_createtable(L, size, 0);
 		for (uint32_t i = 0; i < size; i++) {
-			luaL_mp_unpack(L, data, end);
+			luaL_mp_load(L, data);
 			lua_rawseti(L, -2, i + 1);
 		}
 		return;
 	}
 	case MP_MAP:
 	{
-		uint32_t size = mp_map_pick(data, end);
+		uint32_t size = mp_map_load(data);
 		lua_createtable(L, 0, size);
 		for (uint32_t i = 0; i < size; i++) {
-			luaL_mp_unpack(L, data, end);
-			luaL_mp_unpack(L, data, end);
+			luaL_mp_load(L, data);
+			luaL_mp_load(L, data);
 			lua_settable(L, -3);
 		}
 		return;
@@ -619,7 +619,7 @@ lbox_tuple_unpack(struct lua_State *L)
 	tuple_rewind(&it, tuple);
 	const char *field;
 	while ((field = tuple_next(&it)))
-		luaL_mp_unpack(L, &field, tuple->data + tuple->bsize);
+		luaL_mp_load(L, &field);
 
 	assert(lua_gettop(L) == tuple_arity(tuple) + 1);
 	return lua_gettop(L) - 1;
@@ -637,7 +637,7 @@ lbox_tuple_totable(struct lua_State *L)
 	const char *field;
 	while ((field = tuple_next(&it))) {
 		lua_pushnumber(L, index++);
-		luaL_mp_unpack(L, &field, tuple->data + tuple->bsize);
+		luaL_mp_load(L, &field);
 		lua_rawset(L, -3);
 	}
 
@@ -671,7 +671,7 @@ lbox_tuple_index(struct lua_State *L)
 			luaL_error(L, "%s: index %d is out of bounds (0..%d)",
 				   tuplelib_name, i, mp_array_load(&data));
 		}
-		luaL_mp_unpack(L, &field, tuple->data + tuple->bsize);
+		luaL_mp_load(L, &field);
 		return 1;
 	}
 
@@ -755,14 +755,13 @@ lbox_tuple_next(struct lua_State *L)
 	}
 
 	const char *field = tuple_next(it);
-	const char *end = it->tuple->data + it->tuple->bsize;
 	if (field == NULL) {
 		lua_pop(L, 1);
 		lua_pushnil(L);
 		return 1;
 	}
 
-	luaL_mp_unpack(L, &field, end);
+	luaL_mp_load(L, &field);
 	return 2;
 }
 
@@ -1442,7 +1441,7 @@ box_lua_execute(const struct request *request, struct txn *txn,
 		luaL_checkstack(L, arg_count, "call: out of stack");
 
 		for (uint32_t i = 0; i < arg_count; i++) {
-			luaL_mp_unpack(L, &args, request->c.args_end);
+			luaL_mp_load(L, &args);
 		}
 		lua_call(L, arg_count + oc - 1, LUA_MULTRET);
 		/* Send results of the called procedure to the client. */
@@ -1779,7 +1778,9 @@ lbox_unpack(struct lua_State *L)
 			break;
 		case 'P':
 		case 'p':
-			luaL_mp_unpack(L, &s, end);
+			if (unlikely(!mp_check(&s, end)))
+				tnt_raise(IllegalParams, "Invalid MsgPack");
+			luaL_mp_load(L, &s);
 			break;
 		case '=':
 			/* update tuple set foo = bar */

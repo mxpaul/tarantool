@@ -47,11 +47,12 @@ key_validate_parts(struct key_def *key_def, const char *key,
 	(void) key;
 
 	for (uint32_t part = 0; part < part_count; part++) {
-		enum mp_type type = mp_load(&key);
+		enum mp_type type = mp_typeof(*key);
+		mp_load(&key);
 
 		enum field_type part_type = key_def->parts[part].type;
 
-		if (part_type == NUM && type != MP_UINT)
+		if (unlikely(part_type == NUM && type != MP_UINT))
 			tnt_raise(ClientError, ER_KEY_FIELD_TYPE,
 				  part, field_type_strs[part_type]);
 	}
@@ -61,8 +62,9 @@ void
 key_validate(struct key_def *key_def, enum iterator_type type, const char *key)
 {
 	uint32_t part_count = 0;
-	if (key != NULL)
+	if (key != NULL) {
 		part_count = mp_array_load(&key);
+	}
 	if (part_count == 0) {
 		/*
 		 * Zero key parts are allowed:

@@ -289,7 +289,7 @@ HashIndex::initIterator(struct iterator *ptr, enum iterator_type type,
 			const char *key) const
 {
 	uint32_t part_count = 0;
-	if (key != NULL) {
+	if (likely(key != NULL)) {
 		const char *kk = key;
 		part_count = mp_array_load(&kk);
 	}

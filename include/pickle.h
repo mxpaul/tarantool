@@ -99,50 +99,16 @@ extern "C" {
 #define MSGPACK 1
 
 #define mp_unreachable() (assert(false), __builtin_unreachable())
+#define mp_likely(x)    __builtin_expect((x),1)
+#define mp_unlikely(x)  __builtin_expect((x),0)
 
-inline enum mp_type
+extern const enum mp_type mp_type_hint[];
+extern const int8_t mp_parser_hint[];
+
+__attribute__((always_inline)) inline enum mp_type
 mp_typeof(const char c)
 {
-	switch ((unsigned char) c) {
-	case 0x00 ... 0x7f:
-		return MP_UINT;
-	case 0x80 ... 0x8f:
-		return MP_MAP;
-	case 0x90 ... 0x9f:
-		return MP_ARRAY;
-	case 0xa0 ... 0xbf:
-		return MP_STR;
-	case 0xc0:
-		return MP_NIL;
-	case 0xc1:
-		return MP_EXT; /* (never used) */
-	case 0xc2 ... 0xc3:
-		return MP_BOOL;
-	case 0xc4 ... 0xc6:
-		return MP_BIN;
-	case 0xc7 ... 0xc9:
-		return MP_EXT;
-	case 0xca:
-		return MP_FLOAT;
-	case 0xcb:
-		return MP_DOUBLE;
-	case 0xcc ... 0xcf:
-		return MP_UINT;
-	case 0xd0 ... 0xd3:
-		return MP_INT;
-	case 0xd4 ... 	0xd8:
-		return MP_EXT;
-	case 0xd9 ... 0xdb:
-		return MP_STR;
-	case 0xdc ... 	0xdd:
-		return MP_ARRAY;
-	case 0xde ... 0xde:
-		return MP_MAP;
-	case 0xe0 ... 0xff:
-		return MP_INT;
-	default:
-		return MP_EXT;
-	}
+	return mp_type_hint[(unsigned char) c];
 }
 
 inline uint32_t
@@ -174,26 +140,26 @@ mp_array_pack(char *data, uint32_t size)
 	}
 }
 
-inline uint32_t
+__attribute__((deprecated)) inline uint32_t
 mp_array_pick(const char **data, const char *end)
 {
-	if (unlikely(*data >= end))
+	if (mp_unlikely(*data >= end))
 		tnt_raise(IllegalParams, "invalid MsgPack array 1");
 
-	unsigned const char c = **data;
+	const unsigned char c = (const unsigned char) **data;
 	*data += 1;
 	uint32_t size;
 	switch (c) {
 	case 0x90 ... 0x9f:
 		return c & 0xf;
 	case 0xdc:
-		if (unlikely(*data + sizeof(uint16_t) > end))
+		if (mp_unlikely(*data + sizeof(uint16_t) > end))
 			tnt_raise(IllegalParams, "invalid MsgPack array 2");
 		size = bswap_u16(*(uint16_t *) *data);
 		*data += sizeof(uint16_t);
 		return size;
 	case 0xdd:
-		if (unlikely(*data + sizeof(uint32_t) > end))
+		if (mp_unlikely(*data + sizeof(uint32_t) > end))
 			tnt_raise(IllegalParams, "invalid MsgPack array 3");
 		size = bswap_u32(*(uint32_t *) *data);
 		*data += sizeof(uint32_t);
@@ -207,19 +173,19 @@ mp_array_pick(const char **data, const char *end)
 inline uint32_t
 mp_array_load(const char **data)
 {
-	unsigned const char c = **data;
+	const unsigned char c = (const unsigned char) **data;
 	*data += 1;
-	uint32_t size;
 
-	if (likely((c & 0xf0) == 0x90))
+	if (mp_likely(!(c & 0x40)))
 		return (c & 0xf);
 
-	switch (c) {
-	case 0xdc:
+	uint32_t size;
+	switch (c & 0x1) {
+	case 0xdc & 0x1:
 		size = bswap_u16(*(uint16_t *) *data);
 		*data += sizeof(uint16_t);
 		return size;
-	case 0xdd:
+	case 0xdd & 0x1:
 		size = bswap_u32(*(uint32_t *) *data);
 		*data += sizeof(uint32_t);
 		return size;
@@ -227,6 +193,7 @@ mp_array_load(const char **data)
 
 	mp_unreachable();
 }
+
 
 inline uint32_t
 mp_map_sizeof(uint32_t size)
@@ -257,26 +224,26 @@ mp_map_pack(char *data, uint32_t size)
 	}
 }
 
-inline uint32_t
+__attribute__((deprecated)) inline uint32_t
 mp_map_pick(const char **data, const char *end)
 {
-	if (unlikely(*data >= end))
+	if (mp_unlikely(*data >= end))
 		tnt_raise(IllegalParams, "invalid MsgPack map");
 
-	unsigned const char c = **data;
+	const unsigned char c = (const unsigned char) **data;
 	*data += 1;
 	uint32_t size;
 	switch (c) {
 	case 0x80 ... 0x8f:
 		return c & 0xf;
 	case 0xde:
-		if (unlikely(*data + sizeof(uint16_t) > end))
+		if (mp_unlikely(*data + sizeof(uint16_t) > end))
 			tnt_raise(IllegalParams, "invalid MsgPack map");
 		size = bswap_u16(*(uint16_t *) *data);
 		*data += sizeof(uint16_t);
 		return size;
 	case 0xdf:
-		if (unlikely(*data + sizeof(uint32_t) > end))
+		if (mp_unlikely(*data + sizeof(uint32_t) > end))
 			tnt_raise(IllegalParams, "invalid MsgPack map");
 		size = bswap_u32(*(uint32_t *) *data);
 		*data += sizeof(uint32_t);
@@ -290,7 +257,7 @@ mp_map_pick(const char **data, const char *end)
 inline uint32_t
 mp_map_load(const char **data)
 {
-	unsigned const char c = **data;
+	const unsigned char c = (const unsigned char) **data;
 	*data += 1;
 	uint32_t size;
 	switch (c) {
@@ -402,38 +369,38 @@ mp_int_pack(char *data, int64_t num)
 }
 
 
-inline uint64_t
+__attribute__((deprecated)) inline uint64_t
 mp_uint_pick(const char **data, const char *end)
 {
-	if (unlikely(*data >= end))
+	if (mp_unlikely(*data >= end))
 		tnt_raise(IllegalParams, "invalid MsgPack uint");
 
-	unsigned const char c = **data;
+	const unsigned char c = (const unsigned char) **data;
 	*data += 1;
 	uint64_t val;
 	switch (c) {
 	case 0x00 ... 0x7f:
 		return c;
 	case 0xcc:
-		if (unlikely(*data + sizeof(uint8_t) > end))
+		if (mp_unlikely(*data + sizeof(uint8_t) > end))
 			tnt_raise(IllegalParams, "invalid MsgPack uint");
 		val = *(uint8_t *) *data;
 		*data += sizeof(uint8_t);
 		return val;
 	case 0xcd:
-		if (unlikely(*data + sizeof(uint16_t) > end))
+		if (mp_unlikely(*data + sizeof(uint16_t) > end))
 			tnt_raise(IllegalParams, "invalid MsgPack uint");
 		val = bswap_u16(*(uint16_t *) *data);
 		*data += sizeof(uint16_t);
 		return val;
 	case 0xce:
-		if (unlikely(*data + sizeof(uint32_t) > end))
+		if (mp_unlikely(*data + sizeof(uint32_t) > end))
 			tnt_raise(IllegalParams, "invalid MsgPack uint");
 		val = bswap_u32(*(uint32_t *) *data);
 		*data += sizeof(uint32_t);
 		return val;
 	case 0xcf:
-		if (unlikely(*data + sizeof(uint64_t) > end))
+		if (mp_unlikely(*data + sizeof(uint64_t) > end))
 			tnt_raise(IllegalParams, "invalid MsgPack uint");
 		val = bswap_u64(*(uint64_t *) *data);
 		*data += sizeof(uint64_t);
@@ -444,38 +411,38 @@ mp_uint_pick(const char **data, const char *end)
 	}
 }
 
-inline int64_t
+__attribute__((deprecated)) inline int64_t
 mp_int_pick(const char **data, const char *end)
 {
-	if (unlikely(*data >= end))
+	if (mp_unlikely(*data >= end))
 		tnt_raise(IllegalParams, "invalid MsgPack int");
 
-	unsigned const char c = **data;
+	const unsigned char c = (const unsigned char) **data;
 	*data += 1;
 	int64_t val;
 	switch (c) {
 	case 0xe0 ... 0xff:
 		return (c & 0x1f); /* signed and < 0 */
 	case 0xd0:
-		if (unlikely(*data + sizeof(uint8_t) > end))
+		if (mp_unlikely(*data + sizeof(uint8_t) > end))
 			tnt_raise(IllegalParams, "invalid MsgPack int");
 		val = *(int8_t *) *data;
 		*data += sizeof(int8_t);
 		return val;
 	case 0xd1:
-		if (unlikely(*data + sizeof(uint16_t) > end))
+		if (mp_unlikely(*data + sizeof(uint16_t) > end))
 			tnt_raise(IllegalParams, "invalid MsgPack int");
 		val = bswap_u16(*(int16_t *) *data);
 		*data += sizeof(int16_t);
 		return val;
 	case 0xd2:
-		if (unlikely(*data + sizeof(int32_t) > end))
+		if (mp_unlikely(*data + sizeof(int32_t) > end))
 			tnt_raise(IllegalParams, "invalid MsgPack int");
 		val = bswap_u32(*(int32_t *) *data);
 		*data += sizeof(int32_t);
 		return val;
 	case 0xd3:
-		if (unlikely(*data + sizeof(int64_t) > end))
+		if (mp_unlikely(*data + sizeof(int64_t) > end))
 			tnt_raise(IllegalParams, "invalid MsgPack int");
 		val = bswap_u64(*(int64_t *) *data);
 		*data += sizeof(int64_t);
@@ -489,7 +456,7 @@ mp_int_pick(const char **data, const char *end)
 inline uint64_t
 mp_uint_load(const char **data)
 {
-	unsigned const char c = **data;
+	const unsigned char c = (const unsigned char) **data;
 	*data += 1;
 	uint64_t val;
 
@@ -520,7 +487,7 @@ mp_uint_load(const char **data)
 inline int64_t
 mp_int_load(const char **data)
 {
-	unsigned const char c = **data;
+	const unsigned char c = (const unsigned char) **data;
 	*data += 1;
 	int64_t val;
 	switch (c) {
@@ -579,10 +546,10 @@ mp_double_pack(char *data, double num)
 	return data + sizeof(double);
 }
 
-inline float
+__attribute__((deprecated)) inline float
 mp_float_pick(const char **data, const char *end)
 {
-	if (unlikely(*data + sizeof(float) >= end ||
+	if (mp_unlikely(*data + sizeof(float) >= end ||
 	    *(unsigned const char *) *data != 0xca))
 		tnt_raise(IllegalParams, "invalid MsgPack float");
 
@@ -592,10 +559,10 @@ mp_float_pick(const char **data, const char *end)
 	return val;
 }
 
-inline double
+__attribute__((deprecated)) inline double
 mp_double_pick(const char **data, const char *end)
 {
-	if (unlikely(*data + sizeof(double) > end ||
+	if (mp_unlikely(*data + sizeof(double) > end ||
 	    *(unsigned const char *) *data != 0xcb))
 		tnt_raise(IllegalParams, "invalid MsgPack double");
 
@@ -608,7 +575,7 @@ mp_double_pick(const char **data, const char *end)
 inline float
 mp_float_load(const char **data)
 {
-	unsigned const char c = **data;
+	const unsigned char c = (const unsigned char) **data;
 	assert(c == 0xca);
 	(void) c;
 	*data += 1;
@@ -620,7 +587,7 @@ mp_float_load(const char **data)
 inline double
 mp_double_load(const char **data)
 {
-	unsigned const char c = **data;
+	const unsigned char c = (const unsigned char) **data;
 	assert(c == 0xcb);
 	(void) c;
 	*data += 1;
@@ -634,10 +601,8 @@ mp_str_sizeof(uint32_t len)
 {
 	if (len <= 31) {
 		return 1 + len;
-#if defined(MSGPACK_NEW_SPEC)
 	} else if (len <= UINT8_MAX) {
 		return 1 + sizeof(uint8_t) + len;
-#endif /* defined(MSGPACK_NEW_SPEC) */
 	} else if (len <= UINT16_MAX) {
 		return 1 + sizeof(uint16_t) + len;
 	} else {
@@ -663,13 +628,11 @@ mp_str_pack_size(char *data, uint32_t len)
 	if (len <= 31) {
 		*data = 0xa0 | (unsigned char) len;
 		data += 1;
-#if defined(MSGPACK_NEW_SPEC)
 	} else if (len <= UINT8_MAX) {
 		*data = 0xd9;
 		data += 1;
 		*(uint8_t *) data = len;
 		data += sizeof(uint8_t);
-#endif /* defined(MSGPACK_NEW_SPEC) */
 	} else if (len <= UINT16_MAX) {
 		*data = 0xda;
 		data += 1;
@@ -721,9 +684,10 @@ mp_str_load(const char **data, uint32_t *len)
 {
 	assert(len != NULL);
 
-	unsigned const char c = **data;
+	const unsigned char c = (const unsigned char) **data;
 	*data += 1;
 	const char *str;
+
 	switch (c) {
 	case 0xa0 ... 0xbf:
 		*len = c & 0x1f;
@@ -753,34 +717,34 @@ mp_str_load(const char **data, uint32_t *len)
 	mp_unreachable();
 }
 
-inline const char *
+__attribute__((deprecated)) inline const char *
 mp_str_pick(const char **data, const char *end, uint32_t *len)
 {
 	assert(len != NULL);
 
-	if (unlikely(*data >= end))
+	if (mp_unlikely(*data >= end))
 		tnt_raise(IllegalParams, "invalid MsgPack str");
 
-	unsigned const char c = **data;
+	const unsigned char c = (const unsigned char) **data;
 	*data += 1;
 	switch (c) {
 	case 0xa0 ... 0xbf:
 		*len = (c & 0x1f);
 		break;
 	case 0xd9:
-		if (unlikely(*data + sizeof(uint8_t) > end))
+		if (mp_unlikely(*data + sizeof(uint8_t) > end))
 			tnt_raise(IllegalParams, "invalid MsgPack str");
 		*len = *(uint8_t *) *data;
 		*data += sizeof(uint8_t);
 		break;
 	case 0xda:
-		if (unlikely(*data + sizeof(uint16_t) > end))
+		if (mp_unlikely(*data + sizeof(uint16_t) > end))
 			tnt_raise(IllegalParams, "invalid MsgPack str");
 		*len = bswap_u16(*(uint16_t *) *data);
 		*data += sizeof(uint16_t);
 		break;
 	case 0xdb:
-		if (unlikely(*data + sizeof(uint32_t) > end))
+		if (mp_unlikely(*data + sizeof(uint32_t) > end))
 			tnt_raise(IllegalParams, "invalid MsgPack str");
 		*len = bswap_u32(*(uint32_t *) *data);
 		*data += sizeof(uint32_t);
@@ -790,38 +754,38 @@ mp_str_pick(const char **data, const char *end, uint32_t *len)
 		return NULL;
 	}
 
-	if (unlikely(*data + *len > end))
+	if (mp_unlikely(*data + *len > end))
 		tnt_raise(IllegalParams, "invalid MsgPack str");
 	const char *str = *data;
 	*data += *len;
 	return str;
 }
 
-inline const char *
+__attribute__((deprecated)) inline const char *
 mp_bin_pick(const char **data, const char *end, uint32_t *len)
 {
 	assert(len != NULL);
 
-	if (unlikely(*data >= end))
+	if (mp_unlikely(*data >= end))
 		tnt_raise(IllegalParams, "invalid MsgPack binary");
 
-	unsigned const char c = **data;
+	const unsigned char c = (const unsigned char) **data;
 	*data += 1;
 	switch (c) {
 	case 0xc4:
-		if (unlikely(*data + sizeof(uint8_t) > end))
+		if (mp_unlikely(*data + sizeof(uint8_t) > end))
 			tnt_raise(IllegalParams, "invalid MsgPack binary");
 		*len = *(uint8_t *) *data;
 		*data += sizeof(uint8_t);
 		break;
 	case 0xc5:
-		if (unlikely(*data + sizeof(uint16_t) > end))
+		if (mp_unlikely(*data + sizeof(uint16_t) > end))
 			tnt_raise(IllegalParams, "invalid MsgPack binary");
 		*len = *(uint16_t *) *data;
 		*data += sizeof(uint16_t);
 		break;
 	case 0xc6:
-		if (unlikely(*data + sizeof(uint32_t) > end))
+		if (mp_unlikely(*data + sizeof(uint32_t) > end))
 			tnt_raise(IllegalParams, "invalid MsgPack binary");
 		*len = *(uint32_t *) *data;
 		*data += sizeof(uint32_t);
@@ -831,7 +795,7 @@ mp_bin_pick(const char **data, const char *end, uint32_t *len)
 		return NULL;
 	}
 
-	if (unlikely(*data + *len > end))
+	if (mp_unlikely(*data + *len > end))
 		tnt_raise(IllegalParams, "invalid MsgPack binary");
 
 	const char *str = *data;
@@ -845,7 +809,7 @@ mp_bin_load(const char **data, uint32_t *len)
 {
 	assert(len != NULL);
 
-	unsigned const char c = **data;
+	const unsigned char c = (const unsigned char) **data;
 	*data += 1;
 	const char *str;
 	switch (c) {
@@ -885,14 +849,14 @@ mp_nil_pack(char *data)
 	return data + 1;
 }
 
-inline void
+__attribute__((deprecated)) inline void
 mp_nil_pick(const char **data, const char *end)
 {
-	if (unlikely(*data >= end))
+	if (mp_unlikely(*data >= end))
 		tnt_raise(IllegalParams, "invalid MsgPack nil");
 
 	unsigned char c = *(const unsigned char *) *data;
-	if (unlikely(c != 0xc0))
+	if (mp_unlikely(c != 0xc0))
 		tnt_raise(IllegalParams, "invalid MsgPack nil");
 	*data += 1;
 }
@@ -919,10 +883,10 @@ mp_bool_pack(char *data, bool val)
 	return data + 1;
 }
 
-inline bool
+__attribute__((deprecated)) inline bool
 mp_bool_pick(const char **data, const char *end)
 {
-	if (unlikely(*data >= end))
+	if (mp_unlikely(*data >= end))
 		tnt_raise(IllegalParams, "invalid MsgPack bool");
 
 	unsigned char c = *(const unsigned char *) *data;
@@ -952,237 +916,38 @@ mp_bool_load(const char **data)
 	mp_unreachable();
 }
 
-inline enum mp_type
+enum { MP_HINT = -32 };
+
+void
+mp_load_slowpath(const char **data, int k);
+
+inline void
 mp_load(const char **data)
 {
-	uint32_t size;
-	unsigned char c = *(unsigned char *) *data;
-	*data += 1;
-
-	switch (c) {
-	/* {{{ MP_UINT */
-	case 0x00 ... 0x7f:
-		return MP_UINT;
-	case 0xcc:
-		*data += sizeof(uint8_t);
-		return MP_UINT;
-	case 0xcd:
-		*data += sizeof(uint16_t);
-		return MP_UINT;
-	case 0xce:
-		*data += sizeof(uint32_t);
-		return MP_UINT;
-	case 0xcf:
-		*data += sizeof(uint64_t);
-		return MP_UINT;
-	/* }}} */
-
-	/* {{{ MP_INT */
-#if defined(TEST)
-	case 0xd0 ... 0dx3:
-		*data += 1 << (c & 0x3);
-		*data += sizeof(uint8_t);
-		return MP_INT;
-#endif
-	case 0xe0 ... 0xff:
-		return MP_INT;
-	case 0xd1:
-		*data += sizeof(uint16_t);
-		return MP_INT;
-	case 0xd2:
-		*data += sizeof(uint32_t);
-		return MP_INT;
-	case 0xd3:
-		*data += sizeof(int64_t);
-		return MP_INT;
-	/* }}} */
-
-	/* {{{ MP_MAP */
-	case 0x80 ... 0x8f:
-		size = (c & 0xf);
-		for (uint32_t i = 0; i < size; i++) {
-			mp_load(data); 	/* Key */
-			mp_load(data);	/* Value */
+	int k = 1;
+	for (; k > 0; k--) {
+		unsigned char c = *(unsigned char *) *data;
+		int l = mp_parser_hint[c];
+		if (mp_likely(l >= 0)) {
+			*data += l + 1;
+			continue;
+		} else if (mp_likely(c == 0xd9)){
+			/* MP_STR (8) */
+			*data += 1;
+			*data += *(uint8_t *) *data + sizeof(uint8_t);
+			continue;
+		} else if (l > MP_HINT) {
+			k -= l;
+			*data += 1;
+			continue;
+		} else {
+			return mp_load_slowpath(data, k);
 		}
-		return MP_MAP;
-	case 0xde:
-		size = bswap_u16(*(uint16_t *) *data);
-		*data += sizeof(uint16_t);
-		for (uint32_t i = 0; i < size; i++) {
-			mp_load(data); 	/* Key */
-			mp_load(data);	/* Value */
-		}
-		return MP_MAP;
-	case 0xdf:
-		size = bswap_u32(*(uint32_t *) *data);
-		*data += sizeof(uint32_t);
-		for (uint32_t i = 0; i < size; i++) {
-			mp_load(data); 	/* Key */
-			mp_load(data);	/* Value */
-		}
-		return MP_MAP;
-	/* }}} */
-
-	/* {{{ MP_ARRAY */
-	case 0x90 ... 0x9f:
-		size = c & 0xf;
-		for (uint32_t i = 0; i < size; i++) {
-			mp_load(data);
-		}
-		return MP_ARRAY;
-	case 0xdc:
-		size = bswap_u16(*(uint16_t *) *data);
-		*data += sizeof(uint16_t);
-		for (uint32_t i = 0; i < size; i++) {
-			mp_load(data);
-		}
-		return MP_ARRAY;
-	case 0xdd:
-		size = bswap_u32(*(uint32_t *) *data);
-		*data += sizeof(uint32_t);
-		for (uint32_t i = 0; i < size; i++) {
-			mp_load(data);
-		}
-		return MP_ARRAY;
-	/* }}} */
-
-	/* {{{ MP_STR */
-	case 0xa0 ... 0xbf:
-		size = (c & 0x1f);
-		*data += size;
-		return MP_STR;
-	case 0xd9:
-		size = *(uint8_t *) *data;
-		*data += sizeof(uint8_t);
-		*data += size;
-		return MP_STR;
-	case 0xda:
-		size = bswap_u16(*(uint16_t *) *data);
-		*data += sizeof(uint16_t);
-		*data += size;
-		return MP_STR;
-	case 0xdb:
-		size = bswap_u32(*(uint32_t *) *data);
-		*data += sizeof(uint32_t);
-		*data += size;
-		return MP_STR;
-	/* }}} */
-
-	/* {{{ MP_NIL */
-	case 0xc0:
-		return MP_NIL;
-	/* }}} */
-
-	/* {{{ MP_BOOL */
-	case 0xc2 ... 0xc3:
-		return MP_BOOL;
-	/* }}} */
-
-	/* {{{ MP_FLOAT */
-	case 0xca:
-		*data += sizeof(float);
-		return MP_FLOAT;
-	/* }}} */
-
-	/* {{{ MP_DOUBLE */
-	case 0xcb:
-		*data += sizeof(double);
-		return MP_DOUBLE;
-	/* }}} */
-
-	/* {{{ MP_BIN */
-	case 0xc4:
-		size = *(uint8_t *) *data;
-		*data += sizeof(uint8_t);
-		*data += size;
-		return MP_BIN;
-	case 0xc5:
-		size = bswap_u16(*(uint16_t *) *data);
-		*data += sizeof(uint16_t);
-		*data += size;
-		return MP_BIN;
-	case 0xc6:
-		size = bswap_u32(*(uint32_t *) *data);
-		*data += sizeof(uint32_t);
-		*data += size;
-		return MP_BIN;
-	/* }}} */
-#if 0
-	case 0xc1:          /* reserved */
-	case 0xc7 ... 0xc9: /* extensions */
-	case 0xd4 ... 0xd8: /* extensions */
-		assert(false);
-		return MP_EXT;
-#endif
 	}
-
-	mp_unreachable();
 }
 
-inline enum mp_type
-mp_pick(const char **data, const char *end)
-{
-	if (unlikely(*data >= end))
-		tnt_raise(IllegalParams, "invalid MsgPack");
-
-	uint32_t size;
-
-	switch (*(unsigned char *) *data) {
-	case 0x00 ... 0x7f:
-	case 0xcc ... 0xcf:
-		(void) mp_uint_pick(data, end);
-		return MP_UINT;
-	case 0xd0 ... 0xd3:
-	case 0xe0 ... 0xff:
-		(void) mp_int_pick(data, end);
-		return MP_INT;
-	case 0x80 ... 0x8f:
-	case 0xde ...  0xdf:
-		size = mp_map_pick(data, end);
-		for (uint32_t i = 0; i < size; i++) {
-			mp_pick(data, end); 	/* Key */
-			mp_pick(data, end);	/* Value */
-		}
-		return MP_MAP;
-	case 0x90 ... 0x9f:
-	case 0xdc ... 0xdd:
-		size = mp_array_pick(data, end);
-		for (uint32_t i = 0; i < size; i++) {
-			mp_pick(data, end); /* Element */
-		}
-		return MP_ARRAY;
-	case 0xa0 ... 0xbf:
-	case 0xd9 ... 0xdb:
-		(void) mp_str_pick(data, end, &size);
-		return MP_STR;
-	case 0xc0:
-		(void) mp_nil_pick(data, end);
-		return MP_NIL;
-	case 0xc2 ... 0xc3:
-		(void) mp_bool_pick(data, end);
-		return MP_BOOL;
-	case 0xca:
-		(void) mp_float_pick(data, end);
-		return MP_FLOAT;
-	case 0xcb:
-		(void) mp_double_pick(data, end);
-		return MP_DOUBLE;
-	case 0xc4 ... 0xc6:
-		(void) mp_bin_pick(data, end, &size);
-		return MP_BIN;
-#if 0
-	case 0xc1:
-	case 0xc7 ... 0xc9:
-	case 0xd4 ... 	0xd8:
-		return MP_EXT;
-#endif
-	}
-
-	tnt_raise(IllegalParams, "unsupported MsgPack");
-	mp_unreachable();
-}
-
-#undef mp_unreachable
+bool
+mp_check(const char **data, const char *end);
 
 #if defined(__cplusplus)
 } /* extern "C" */

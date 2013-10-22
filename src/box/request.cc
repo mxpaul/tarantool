@@ -45,9 +45,9 @@ static const char *
 read_tuple(const char **reqpos, const char *reqend)
 {
 	const char *tuple = *reqpos;
-	if (mp_pick(reqpos, reqend) != MP_ARRAY)
-		tnt_raise(IllegalParams,
-			  "tuple_new(): tuple must be MsgPack Array");
+	if (unlikely(!mp_check(reqpos, reqend)))
+		tnt_raise(IllegalParams, "Invalid MsgPack");
+
 	return tuple;
 }
 
@@ -220,8 +220,13 @@ request_create(struct request *request, uint32_t type, const char *data,
 		request->flags |= (pick_u32(reqpos, reqend) &
 				   BOX_ALLOWED_REQUEST_FLAGS);
 		request->r.tuple = *reqpos;
-		/* Do not parse the tail, execute_replace will do it */
-		request->r.tuple_end = reqend;
+		if (unlikely(!mp_check(reqpos, reqend)))
+			tnt_raise(IllegalParams, "Invalid MsgPack");
+
+		if (unlikely(*reqpos != reqend))
+			tnt_raise(IllegalParams, "can't unpack request");
+
+		request->r.tuple_end = *reqpos;
 		break;
 	case SELECT:
 		request->execute = execute_select;
@@ -255,18 +260,20 @@ request_create(struct request *request, uint32_t type, const char *data,
 		}
 		request->d.key = read_tuple(reqpos, reqend);
 		request->d.key_end = *reqpos;
-		if (*reqpos != reqend)
+		if (unlikely(*reqpos != reqend))
 			tnt_raise(IllegalParams, "can't unpack request");
 		break;
 	case CALL:
 		request->execute = box_lua_execute;
 		request->flags |= (pick_u32(reqpos, reqend) &
 				   BOX_ALLOWED_REQUEST_FLAGS);
-		request->c.procname = mp_str_pick(reqpos, reqend,
-						    &request->c.procname_len);
+		if (unlikely(!mp_check(reqpos, reqend)))
+			tnt_raise(IllegalParams, "Invalid MsgPack");
+		request->c.procname = mp_str_load(reqpos,
+						  &request->c.procname_len);
 		request->c.args = read_tuple(reqpos, reqend);
 		request->c.args_end = *reqpos;
-		if (*reqpos != reqend)
+		if (unlikely(*reqpos != reqend))
 			tnt_raise(IllegalParams, "can't unpack request");
 		break;
 	default:

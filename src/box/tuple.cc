@@ -224,7 +224,8 @@ tuple_init_field_map(struct tuple_format *format, struct tuple *tuple, uint32_t 
 
 	for (; type < type_end; offset++, type++, i++) {
 		const char *d = pos;
-		enum mp_type ftype = mp_load(&pos);
+		enum mp_type ftype = mp_typeof(*pos);
+		mp_load(&pos);
 
 		if ( (*type == NUM && ftype != MP_UINT) ||
 		     (*type == STRING && ftype != MP_STR)) {
@@ -391,13 +392,7 @@ struct tuple *
 tuple_new(struct tuple_format *format, const char **data, const char *end)
 {
 	size_t tuple_len = end - *data;
-
-	/*
-	if (mp_pick(data, end) != MP_ARRAY)
-		tnt_raise(IllegalParams,
-			  "tuple_new(): tuple must be MsgPack Array");
-			 */
-
+#if 0
 	mp_load(data);
 	if (*data != end) {
 		say_error("\n"
@@ -417,7 +412,10 @@ tuple_new(struct tuple_format *format, const char **data, const char *end)
 		free(base64_buf);
 		tnt_raise(IllegalParams, "tuple_new(): incorrect tuple format");
 	}
-
+#endif
+	if (unlikely(mp_typeof(**data) != MP_ARRAY))
+		tnt_raise(IllegalParams,
+			  "tuple_new(): tuple must be MsgPack Array");
 	struct tuple *new_tuple = tuple_alloc(format, tuple_len);
 	memcpy(new_tuple->data, end - tuple_len, tuple_len);
 	try {

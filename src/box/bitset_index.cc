@@ -153,6 +153,7 @@ make_key(const char *field, uint32_t *key_len)
 		return mp_str_load(&field, key_len);
 		break;
 	default:
+		*key_len = 0;
 		assert(false);
 		return NULL;
 	}
