@@ -151,10 +151,21 @@ arena_init(struct arena *arena, size_t size)
 	arena->mmap_size = size - size % SLAB_SIZE + SLAB_SIZE;	/* spend SLAB_SIZE bytes on align :-( */
 
 	arena->mmap_base = mmap(NULL, arena->mmap_size,
-				PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+				PROT_READ | PROT_WRITE,
+				MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+
 	if (arena->mmap_base == MAP_FAILED) {
 		say_syserror("mmap");
-		return false;
+		say_warn("Try to mmap arena with MAP_PRIVATE flag");
+
+		arena->mmap_base = mmap(NULL, arena->mmap_size,
+			PROT_READ | PROT_WRITE,
+			 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+
+		if (arena->mmap_base == MAP_FAILED) {
+			say_syserror("mmap");
+			return false;
+		}
 	}
 
 	arena->base = (char *)SLAB_ALIGN_PTR(arena->mmap_base) + SLAB_SIZE;
