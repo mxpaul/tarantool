@@ -45,6 +45,8 @@
 
 #define SLAB_ALIGN_PTR(ptr) (void *)((uintptr_t)(ptr) & ~(SLAB_SIZE - 1))
 
+extern int snapshot_pid;
+
 #ifdef SLAB_DEBUG
 #undef NDEBUG
 uint8_t red_zone[4] = { 0xfa, 0xfa, 0xfa, 0xfa };
@@ -322,6 +324,9 @@ sfree(void *ptr)
 static void
 sfree_batch(void)
 {
+	if (snapshot_pid)
+		return;
+
 	ssize_t batch = arena.delayed_free_batch;
 
 	while (--batch >= 0 && !SLIST_EMPTY(&free_delayed)) {
@@ -340,6 +345,7 @@ sfree_delayed(void *ptr)
 		return;
 	struct slab_item *item = (struct slab_item *)ptr;
 	struct slab *slab = slab_header(item);
+	(void) slab;
 	assert(valid_item(slab, item));
 	SLIST_INSERT_HEAD(&free_delayed, item, next);
 	arena.delayed_free_count++;

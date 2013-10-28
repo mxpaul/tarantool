@@ -44,7 +44,7 @@ set (recompiled_sources
 set (common_sources
      tbuf.c
      rlist.c
-     palloc.cc
+     memory.cc
      util.cc
      sio.cc
      evio.cc
@@ -61,6 +61,7 @@ set (common_sources
      admin.cc
      cpu_feature.c
      replica.cc
+     replica.1.5.cc
      iproto.cc
      iproto_port.cc
      session.cc
@@ -100,7 +101,7 @@ set_source_files_compile_flags(${common_sources})
 add_library(core STATIC ${common_sources})
 add_dependencies(core generate_headers)
 
-set (common_libraries cfg core)
+set (common_libraries cfg core small)
 
 list(APPEND common_libraries
     ${LIBEV_LIBRARIES}
@@ -206,8 +207,6 @@ function(tarantool_module mod)
         ${recompiled_sources} ${module_sources})
 
     add_library(lt${mod} STATIC ${recompiled_sources})
-    set_target_properties(lt${mod} PROPERTIES COMPILE_FLAGS
-        "-DTARANTOOL_CONFIG='<cfg/tarantool_${mod}_cfg.h>'")
     add_dependencies(lt${mod} generate_headers generate_admin_cc build_bundled_libs)
 
     target_link_libraries(tarantool_${mod} lt${mod} ${common_libraries})

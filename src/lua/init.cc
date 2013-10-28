@@ -252,7 +252,7 @@ lbox_print(struct lua_State *L)
 	/* pop 'out' */
 	lua_pop(L, 1);
 	/* always output to log only */
-	out = tbuf_new(fiber->gc_pool);
+	out = tbuf_new(&fiber->gc);
 	/* serialize arguments of 'print' Lua built-in to tbuf */
 	int top = lua_gettop(L);
 	for (int i = 1; i <= top; i++) {
@@ -470,7 +470,7 @@ tarantool_plugin_dir(struct lua_State *L, const char *dir)
 		if (dent->d_type != DT_REG)
 			continue;
 		char *path;
-		asprintf(&path, "%s/%s", dir, dent->d_name);
+		(void) asprintf(&path, "%s/%s", dir, dent->d_name);
 		if (!path) {
 			say_error("Can't allocate memory for %s plugin dir",
 				 dir);
@@ -609,7 +609,7 @@ tarantool_lua_close(struct lua_State *L)
 static int
 tarantool_lua_dostring(struct lua_State *L, const char *str)
 {
-	struct tbuf *buf = tbuf_new(fiber->gc_pool);
+	struct tbuf *buf = tbuf_new(&fiber->gc);
 	tbuf_printf(buf, "%s%s", "return ", str);
 	int r = luaL_loadstring(L, tbuf_str(buf));
 	if (r) {
@@ -825,6 +825,13 @@ load_init_script(va_list ap)
 {
 	struct lua_State *L = va_arg(ap, struct lua_State *);
 
+	/*
+	 * Return control to tarantool_lua_load_init_script.
+	 * tarantool_lua_load_init_script when will start an auxiliary event
+	 * loop and re-schedule this fiber.
+	 */
+	fiber_sleep(0.0);
+
 	char path[PATH_MAX + 1];
 	snprintf(path, PATH_MAX, "%s/%s",
 		 cfg.script_dir, TARANTOOL_LUA_INIT_SCRIPT);
@@ -842,6 +849,12 @@ load_init_script(va_list ap)
 	 * The file doesn't exist. It's OK, tarantool may
 	 * have no init file.
 	 */
+
+	/*
+	 * Lua script finished. Stop the auxiliary event loop and
+	 * return control back to tarantool_lua_load_init_script.
+	 */
+	ev_break(EVBREAK_ALL);
 }
 
 /**
@@ -859,6 +872,8 @@ tarantool_lua_sandbox(struct lua_State *L)
 	 * 1. Some os.* functions (like os.execute, os.exit, etc..)
 	 * 2. require(), since it can be used to provide access to ffi
 	 * or anything else we unset in 1.
+	 * 3. package, because it can be used to invoke require or to get
+	 * any builtin module using package.loaded
 	 */
 	int result = tarantool_lua_dostring(L,
 					    "os.execute = nil\n"
@@ -867,7 +882,9 @@ tarantool_lua_sandbox(struct lua_State *L)
 					    "os.tmpname = nil\n"
 					    "os.remove = nil\n"
 					    "io = nil\n"
-					    "require = nil\n");
+					    "require = nil\n"
+					    "package = nil\n");
+
 	if (result)
 		panic("%s", lua_tostring(L, -1));
 }
@@ -885,6 +902,13 @@ tarantool_lua_load_init_script(struct lua_State *L)
 	struct fiber *loader = fiber_new(TARANTOOL_LUA_INIT_SCRIPT,
 					 load_init_script);
 	fiber_call(loader, L);
+
+	/*
+	 * Run an auxiliary event loop to re-schedule load_init_script fiber.
+	 * When this fiber finishes, it will call ev_break to stop the loop.
+	 */
+	ev_run(0);
+
 	/* Outside the startup file require() or ffi are not
 	 * allowed.
 	*/
