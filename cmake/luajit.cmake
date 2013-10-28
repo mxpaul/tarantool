@@ -171,8 +171,8 @@ macro(luajit_build)
     if (${PROJECT_BINARY_DIR} STREQUAL ${PROJECT_SOURCE_DIR})
         add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/third_party/luajit/src/libluajit.a
             WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/third_party/luajit
-            COMMAND $(MAKE) ${luajit_buildoptions} clean
-            COMMAND $(MAKE) -C src ${luajit_buildoptions} libluajit.a
+            COMMAND $(MAKE) CC=${CMAKE_C_COMPILER} ${luajit_buildoptions} clean
+            COMMAND $(MAKE) CC=${CMAKE_C_COMPILER} -C src ${luajit_buildoptions} libluajit.a
             DEPENDS ${CMAKE_SOURCE_DIR}/CMakeCache.txt
         )
     else()
@@ -182,8 +182,8 @@ macro(luajit_build)
         add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/third_party/luajit/src/libluajit.a
             WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/third_party/luajit
             COMMAND cp -r ${PROJECT_SOURCE_DIR}/third_party/luajit/* .
-            COMMAND $(MAKE) clean
-            COMMAND $(MAKE) -C src ${luajit_buildoptions} libluajit.a
+            COMMAND $(MAKE) CC=${CMAKE_C_COMPILER} clean
+            COMMAND $(MAKE) CC=${CMAKE_C_COMPILER} -C src ${luajit_buildoptions} libluajit.a
             DEPENDS ${PROJECT_BINARY_DIR}/CMakeCache.txt ${PROJECT_BINARY_DIR}/third_party/luajit
         )
     endif()
