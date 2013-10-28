@@ -74,6 +74,7 @@ extern "C" {
 
 static pid_t master_pid;
 const char *cfg_filename = NULL;
+const char *pid_filename = NULL;
 char *cfg_filename_fullpath = NULL;
 char *binary_filename;
 char *custom_proc_title;
@@ -453,8 +454,8 @@ sig_term_cb(int signo)
 {
 	psignal(signo, "");
 	/* unlink pidfile. */
-	if (cfg.pid_file != NULL)
-		unlink(cfg.pid_file);
+	if (pid_filename != NULL)
+		unlink(pid_filename);
 
 	_exit(EXIT_SUCCESS);
 }
@@ -546,10 +547,20 @@ create_pid(void)
 	char buf[16] = { 0 };
 	pid_t pid;
 
-	if (cfg.pid_file == NULL)
-		return;
+	if (pid_filename != NULL) {
+		say_info("Pid file from command line: %s", pid_filename);
+	} else {
+		say_info("Pid file will take from config");
 
-	f = fopen(cfg.pid_file, "a+");
+		if (cfg.pid_file == NULL) {
+			return;
+		} else {
+			pid_filename = cfg.pid_file;
+		}
+
+	}
+
+	f = fopen(pid_filename, "a+");
 	if (f == NULL)
 		panic_syserror("can't open pid file");
 	/*
@@ -569,7 +580,7 @@ create_pid(void)
 		if (fseeko(f, 0, SEEK_SET) != 0)
 			panic_syserror("can't fseek to the beginning of pid file");
 		if (ftruncate(fileno(f), 0) == -1)
-			panic_syserror("ftruncate(`%s')", cfg.pid_file);
+			panic_syserror("ftruncate(`%s')", pid_filename);
 	}
 
 	master_pid = getpid();
@@ -639,8 +650,8 @@ tarantool_free(void)
 	free_proc_title(main_argc, main_argv);
 
 	/* unlink pidfile. */
-	if (cfg.pid_file != NULL)
-		unlink(cfg.pid_file);
+	if (pid_filename != NULL)
+		unlink(pid_filename);
 	destroy_tarantool_cfg(&cfg);
 
 	session_free();
@@ -724,6 +735,8 @@ main(int argc, char **argv)
 		return 0;
 	}
 
+
+	gopt_arg(opt, 'p', &pid_filename);
 	gopt_arg(opt, 'c', &cfg_filename);
 	/*
 	 * if config is not specified trying ./tarantool.cfg then

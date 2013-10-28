@@ -53,5 +53,8 @@ const void *opt_def =
 		   gopt_option('h', 0, gopt_shorts('h', '?'), gopt_longs("help"),
 			       NULL, "display this help and exit"),
 		   gopt_option('V', 0, gopt_shorts('V'), gopt_longs("version"),
-			       NULL, "print program version and exit")
+			       NULL, "print program version and exit"),
+		   gopt_option('p', GOPT_ARG, gopt_shorts('p'),
+			       gopt_longs("pid"),
+			       "=FILE", "path to pid file (default from: " DEFAULT_CFG_FILENAME ")")
 );
