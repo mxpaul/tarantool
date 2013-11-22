@@ -29,6 +29,7 @@ tarantool_param() {
 TARANTOOL_OPTIONS=''
 CONF_DIR=/etc/tarantool/instances.enabled
 
+TARANTOOL_FD_LIMIT=40000
 
 if [ -f /etc/sysconfig/tarantool ] ; then
 	. /etc/sysconfig/tarantool
@@ -125,6 +126,12 @@ start_instance() {
 	status -p $pidfile -l $lockfile $prog >/dev/null
 	RETVAL=$?
 	if [ "$RETVAL" != 0 ]; then
+		ulimit -c unlimited
+		if [ "$TARANTOOL_FD_LIMIT" -gt 1024 -a "$TARANTOOL_FD_LIMIT" -le 65000 ]; then
+			ulimit -n "$TARANTOOL_FD_LIMIT"
+		else
+			echo "Ignoring TARANTOOL_FD_LIMIT value [$TARANTOOL_FD_LIMIT]"
+		fi
 		#cd "$WORK_DIR" && 
 		daemon --pidfile="$pidfile" $path --config "$CONFIG" --background ${TARANTOOL_OPTIONS}
 		RETVAL=$?
