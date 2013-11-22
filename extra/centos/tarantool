@@ -174,19 +174,22 @@ status_instance() {
 	return $RETVAL
 }
 
+if [ "$1" = "-i" ]; then
+	INSTANCE_LIST=$2
+	shift 2
+elif [ "${0##*/}" != "tarantool" ]; then
+	INSTANCE_LIST=${0##*/}
+	INSTANCE_LIST=${INSTANCE_LIST##tarantool_}
+else
+	INSTANCE_LIST=$( test -d "$CONF_DIR" && cd $CONF_DIR && ls -1 *.cfg 2>/dev/null| sort | sed -e 's/\.cfg$//' -e 's/^tarantool_//' )
+fi
 
-INSTANCE_LIST=$( test -d "$CONF_DIR" && cd $CONF_DIR && ls -1 *.cfg 2>/dev/null| sort | sed -e 's/\.cfg$//' -e 's/^tarantool_//' )
 
 if [ -z "$INSTANCE_LIST" ]; then
 	echo "Instance list should not be empty, create .cfg file[s] in $CONF_DIR" >&2
 	exit 0 # Maybe we want list? It's ok if it's empty
 fi
 
-
-if [ "$1" = "-i" ]; then
-	INSTANCE_LIST=$2
-	shift 2
-fi
 
 ACTION=$1
 
